@@ -1,0 +1,51 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Colorizer Service",
+  "description": "Accepts a color image and returns a grayscale (black-and-white) version. Charges $0.01 USDC per conversion via x402 on Base Sepolia (EIP-3009 transferWithAuthorization). Input: base64-encoded JPEG / PNG / WebP / AVIF. Output: base64-encoded grayscale PNG.",
+  "image": "",
+  "active": true,
+  "x402Support": true,
+  "supportedTrust": [
+    "reputation"
+  ],
+  "services": [
+    {
+      "type": "a2a",
+      "url": "http://localhost:3000/agent",
+      "description": "Agent2Agent JSON-RPC endpoint (method: message/send). Payment-gated via x402: expects X-PAYMENT header with EIP-3009 signature on retry."
+    },
+    {
+      "type": "mcp",
+      "url": "ws://localhost:3000/mcp",
+      "description": "Model Context Protocol WebSocket endpoint. Exposes the `colorize` tool directly, no x402 required."
+    },
+    {
+      "type": "web",
+      "url": "http://localhost:3000",
+      "description": "Human-readable index page for manual testing."
+    }
+  ],
+  "skills": [
+    {
+      "id": "colorize",
+      "name": "Colorize (Grayscale)",
+      "description": "Converts a color image to black-and-white. Costs $0.01 USDC per call via x402 on Base Sepolia.",
+      "tags": [
+        "image",
+        "grayscale",
+        "colorize",
+        "processing"
+      ],
+      "examples": [
+        "Convert this image to black and white: https://example.com/photo.jpg",
+        "Make a grayscale version of my image"
+      ]
+    }
+  ],
+  "registrations": [
+    {
+      "agentRegistry": "eip155:84532:0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      "agentId": "2188"
+    }
+  ]
+}
