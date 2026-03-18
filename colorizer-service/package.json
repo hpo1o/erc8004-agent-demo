@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "aixyz dev",
     "dev:direct": "node scripts/dev-direct.mjs",
-    "start": "node scripts/dev-direct.mjs",
+    "start": "bun run scripts/dev-direct.mjs",
     "build": "aixyz build",
     "register": "aixyz erc-8004 register"
   },
