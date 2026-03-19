@@ -20,16 +20,16 @@
 
 import type { FacilitatorClient } from "aixyz/accepts";
 
-// Stable mock transaction hash — looks like a real tx hash so downstream
-// code that expects a 0x-prefixed 32-byte hex string won't break.
-const MOCK_TX_HASH =
-  "0x" + "ca11ab1e".repeat(8) as `0x${string}`;
+// Deliberately un-real mock transaction identifier.
+// Does NOT start with 0x so it cannot be confused with a real on-chain hash.
+const MOCK_TX_HASH = "MOCK_TX_NOT_REAL_0x0000000000000000000000000000000000000000";
 
 export const mockFacilitator: FacilitatorClient = {
   // ── verify ───────────────────────────────────────────────────────────────
   // The real implementation checks the EIP-3009 signature against the
   // USDC contract on-chain. We skip that and always return isValid: true.
   async verify(_payload, _requirements) {
+    console.warn("[x402 MOCK] ⚠ FAKE PAYMENT — not a real transaction");
     console.log(
       "[x402 MOCK] verify() called — skipping on-chain check, returning isValid: true"
     );
@@ -43,6 +43,7 @@ export const mockFacilitator: FacilitatorClient = {
   // The real implementation calls transferWithAuthorization on the USDC
   // contract and waits for the transaction receipt. We return a fake txHash.
   async settle(_payload, requirements) {
+    console.warn("[x402 MOCK] ⚠ FAKE PAYMENT — not a real transaction");
     console.log(
       `[x402 MOCK] settle() called — skipping broadcast, returning mock txHash`
     );

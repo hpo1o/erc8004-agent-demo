@@ -3,8 +3,8 @@ import type { AixyzConfig } from "aixyz/config";
 const config: AixyzConfig = {
   name: "Colorizer Service",
   description:
-    "Accepts an image URL and returns a grayscale (black-and-white) version. " +
-    "Charges $0.01 USDC per conversion via x402 on Base Sepolia.",
+    "Accepts a base64-encoded image (data URL or raw base64) and returns a grayscale version. " +
+    "Charges $0.01 USDC via x402 on Base Sepolia.",
   version: "0.1.0",
 
   x402: {

@@ -1,7 +1,7 @@
 {
   "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
   "name": "Colorizer Service",
-  "description": "Accepts a color image and returns a grayscale (black-and-white) version. Charges $0.01 USDC per conversion via x402 on Base Sepolia (EIP-3009 transferWithAuthorization). Input: base64-encoded JPEG / PNG / WebP / AVIF. Output: base64-encoded grayscale PNG.",
+  "description": "Public agent on Base Sepolia testnet. Accepts a color image and returns a grayscale (black-and-white) version. Charges $0.01 USDC per conversion via x402 on Base Sepolia (EIP-3009 transferWithAuthorization). Input: base64-encoded JPEG / PNG / WebP / AVIF. Output: base64-encoded grayscale PNG.",
   "image": "",
   "active": true,
   "x402Support": true,
@@ -10,18 +10,20 @@
   ],
   "services": [
     {
-      "type": "a2a",
-      "url": "http://localhost:3000/agent",
+      "name": "A2A",
+      "endpoint": "https://erc8004-agent-demo-production.up.railway.app/agent",
+      "version": "0.3.0",
       "description": "Agent2Agent JSON-RPC endpoint (method: message/send). Payment-gated via x402: expects X-PAYMENT header with EIP-3009 signature on retry."
     },
     {
-      "type": "mcp",
-      "url": "ws://localhost:3000/mcp",
+      "name": "MCP",
+      "endpoint": "wss://erc8004-agent-demo-production.up.railway.app/mcp",
+      "version": "2025-06-18",
       "description": "Model Context Protocol WebSocket endpoint. Exposes the `colorize` tool directly, no x402 required."
     },
     {
-      "type": "web",
-      "url": "http://localhost:3000",
+      "name": "web",
+      "endpoint": "https://erc8004-agent-demo-production.up.railway.app",
       "description": "Human-readable index page for manual testing."
     }
   ],
@@ -45,7 +47,7 @@
   "registrations": [
     {
       "agentRegistry": "eip155:84532:0x8004A818BFB912233c491871b3d84c89A494BD9e",
-      "agentId": "2188"
+      "agentId": "2214"
     }
   ]
 }

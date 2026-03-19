@@ -32,11 +32,36 @@ import { privateKeyToAccount } from "viem/accounts";
 // ---------------------------------------------------------------------------
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ERC8004_ROOT = resolve(__dir, "..");
+const PROJECT_ROOT  = resolve(ERC8004_ROOT, "..");
 const CONTRACTS_FILE = resolve(ERC8004_ROOT, "contracts", "registry-addresses.json");
 
 try {
   process.loadEnvFile(resolve(ERC8004_ROOT, ".env"));
 } catch { /* .env absent — vars from shell */ }
+
+// Load image-generator and colorizer-service .env files into a side object
+// (we must not overwrite process.env which already has erc8004 values).
+async function loadEnvFile(path: string): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  try {
+    const raw = await readFile(path, "utf-8");
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq < 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const val = trimmed.slice(eq + 1).trim();
+      if (key) result[key] = val;
+    }
+  } catch { /* file absent */ }
+  return result;
+}
+
+/** Normalise a private key to lowercase hex without 0x prefix for comparison. */
+function normalizeKey(k: string): string {
+  return k.replace(/^0x/i, "").toLowerCase();
+}
 
 // ---------------------------------------------------------------------------
 // Minimal ABI — only totalSupply() needed for reachability check.
@@ -113,6 +138,30 @@ async function main(): Promise<void> {
     } catch {
       printResult("Private key format", false, "invalid hex private key");
       allOk = false;
+    }
+  }
+
+  // ── 2b. Wallet conflict check ─────────────────────────────────────────────
+  // ERC-8004 Reputation Registry rejects self-feedback (caller == agent owner).
+  // If PAYER_PRIVATE_KEY (image-generator) matches ERC8004_PRIVATE_KEY the
+  // reputation step will always be skipped at runtime.
+  {
+    const imgEnv = await loadEnvFile(resolve(PROJECT_ROOT, "image-generator", ".env"));
+    const payerKey  = imgEnv["PAYER_PRIVATE_KEY"] ?? "";
+    const erc8004Key = rawKey ?? "";
+
+    if (payerKey && erc8004Key && normalizeKey(payerKey) === normalizeKey(erc8004Key)) {
+      console.log(`
+⚠  WALLET CONFLICT DETECTED
+   PAYER_PRIVATE_KEY and ERC8004_PRIVATE_KEY are the same wallet.
+   Reputation Registry will be SKIPPED (ERC-8004 forbids self-feedback).
+
+   For full ERC-8004 compliance:
+   - Use a separate wallet for Agent 2 (ERC8004_PRIVATE_KEY)
+   - Or deploy Agent 2 independently with its own wallet
+
+   See README section "Wallet Setup" for instructions.
+`);
     }
   }
 

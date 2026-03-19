@@ -13,14 +13,13 @@ export const accepts: Accepts = {
 };
 
 // ---------------------------------------------------------------------------
-// Custom agent — bypasses the LLM entirely for this deterministic task.
+// Deterministic agent — no LLM involved.
 //
-// Why not ToolLoopAgent + gpt-4o-mini?
-//   Converting an image to grayscale is purely deterministic — no reasoning
-//   needed. Having the LLM echo back a ~50 KB base64 string is unreliable:
-//   models truncate long outputs and the cost of an OpenAI call is wasted.
+// Converting an image to grayscale requires no reasoning: the input is a
+// base64 image, the output is sharp().grayscale(). Using an LLM here would
+// be unreliable (models truncate large base64 strings) and wasteful.
 //
-// Interface contract (what A2APlugin's ToolLoopAgentExecutor expects):
+// Interface contract (AixyzApp A2APlugin):
 //   agent.stream({ prompt }) → { textStream: AsyncIterable<string> }
 //
 // The executor iterates textStream chunks and publishes each as an

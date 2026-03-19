@@ -25,6 +25,7 @@ import { generateImage } from "./dalle.js";
 import { sendToColorizer } from "./colorizer-client.js";
 import { submitFeedback } from "../../erc8004/scripts/reputation.js";
 import { requestValidation } from "../../erc8004/scripts/validation.js";
+import { discoverColorizer } from "../../erc8004/scripts/discovery.js";
 
 // ---------------------------------------------------------------------------
 // Load .env — built-in Node.js 20.12+ API, no dotenv package needed.
@@ -60,6 +61,23 @@ async function main(): Promise<void> {
   requireEnv("OPENAI_API_KEY");
   requireEnv("PAYER_PRIVATE_KEY");
 
+  // ── Determine colorizer endpoint (ERC-8004 discovery or .env override) ───
+  let colorizerEndpoint: string;
+  if (process.env.COLORIZER_URL) {
+    colorizerEndpoint = process.env.COLORIZER_URL;
+    console.log("Using COLORIZER_URL from .env (dev mode)");
+  } else {
+    console.log("Discovering Agent 2 via ERC-8004 registry...");
+    const agentInfo = await discoverColorizer();
+    if (!agentInfo) {
+      throw new Error(
+        "Agent 2 not found in ERC-8004 registry.\nRun: cd erc8004 && npm run register"
+      );
+    }
+    colorizerEndpoint = agentInfo.endpoint;
+    console.log(`  ✓ Discovered: ${colorizerEndpoint} (agentId: ${agentInfo.agentId})\n`);
+  }
+
   // ── Parse CLI arguments ───────────────────────────────────────────────────
   const args = process.argv.slice(2);
   if (args.length === 0) {
@@ -82,7 +100,7 @@ async function main(): Promise<void> {
   // ── Step 2: Send to colorizer-service (Agent 2) ───────────────────────────
   console.log("[2/5] Sending to colorizer-service (Agent 2)...");
   const colorizerStartMs = Date.now();
-  const { grayscaleBase64, txHash, contextId, taskId } = await sendToColorizer(imageBase64);
+  const { grayscaleBase64, txHash, contextId, taskId } = await sendToColorizer(imageBase64, colorizerEndpoint);
   const responseTimeMs = Date.now() - colorizerStartMs;
   const outputKb = Math.round((grayscaleBase64.length * 3) / 4 / 1024);
   console.log(`\n  ✓ Grayscale image received (≈${outputKb} KB, ${responseTimeMs}ms)\n`);
@@ -119,8 +137,8 @@ async function main(): Promise<void> {
     const colorizerReg = JSON.parse(await readFile(colorizerRegPath, "utf-8")) as {
       registrations: Array<{ agentId: string }>;
     };
-    const first = colorizerReg.registrations[0];
-    if (first?.agentId) colorizerAgentId = Number(first.agentId);
+    const last = colorizerReg.registrations[colorizerReg.registrations.length - 1];
+    if (last?.agentId) colorizerAgentId = Number(last.agentId);
   } catch { /* file missing or unreadable — both steps will skip */ }
 
   // Derive payer address once (reused by both steps).
@@ -194,7 +212,11 @@ async function main(): Promise<void> {
   // ── Done ─────────────────────────────────────────────────────────────────
   console.log("=== Done ===");
   console.log(`✓ Saved to: output.jpg`);
-  console.log(`✓ Payment txHash: ${txHash}\n`);
+  if (txHash.startsWith("MOCK_TX")) {
+    console.log(`⚠ Payment txHash: MOCK (not a real transaction)\n`);
+  } else {
+    console.log(`✓ Payment txHash: ${txHash}\n`);
+  }
 }
 
 main().catch((err: unknown) => {

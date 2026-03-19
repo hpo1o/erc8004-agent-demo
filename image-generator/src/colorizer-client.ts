@@ -220,10 +220,9 @@ async function promptConfirm(question: string): Promise<boolean> {
 // Full flow: initial request → 402 → confirm → sign → retry → extract result
 // ---------------------------------------------------------------------------
 export async function sendToColorizer(
-  imageBase64: string // raw base64 from DALL-E, no prefix
+  imageBase64: string, // raw base64 from DALL-E, no prefix
+  colorizerUrl: string
 ): Promise<{ grayscaleBase64: string; txHash: string; contextId: string; taskId: string }> {
-  const colorizerUrl =
-    process.env.COLORIZER_URL ?? "http://localhost:3000/agent";
 
   // Prepend the data URL prefix so the colorizer's stripDataUrlPrefix helper
   // (in tools/colorize.ts) can handle it correctly.

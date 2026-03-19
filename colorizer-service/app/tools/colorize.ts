@@ -19,7 +19,7 @@ function stripDataUrlPrefix(input: string): string {
 //
 // Workflow (triggered AFTER the client has paid $0.01 USDC via x402):
 //
-//   1. Receive a base64-encoded image from the LLM
+//   1. Receive a base64-encoded image from the A2A client (data URL or raw base64)
 //   2. Decode it into a raw binary Buffer
 //   3. Pass the buffer through sharp().grayscale() → re-encode as PNG
 //   4. Encode the result back to base64 and return it

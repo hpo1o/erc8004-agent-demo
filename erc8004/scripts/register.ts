@@ -188,7 +188,7 @@ async function registerAgent(opts: {
   identityRegistryAddress: `0x${string}`;
   agentRegistry: string;              // e.g. "eip155:84532:0x8004A818..."
   account: ReturnType<typeof privateKeyToAccount>;
-  publicClient: ReturnType<typeof createPublicClient>;
+  publicClient: ReturnType<typeof createPublicClient<ReturnType<typeof http>, typeof baseSepolia>>;
   walletClient: ReturnType<typeof createWalletClient>;
   pinatajwt: string;
 }): Promise<{ agentId: bigint; registerTxHash: string; setUriTxHash: string; finalCid: string }> {
@@ -257,16 +257,17 @@ async function registerAgent(opts: {
   console.log(`  ✓ Registered — agentId: ${agentId}`);
 
   // ── Step 5: Patch registrations[] in the registration file ──────────────
+  // Replace the existing entry for this agentRegistry if present, otherwise append.
   console.log(`[${agentName}] Updating registrations[] in registration file...`);
+  const newEntry = { agentRegistry, agentId: agentId.toString() };
+  const existingIndex = regFile.registrations.findIndex(r => r.agentRegistry === agentRegistry);
+  const updatedRegistrations =
+    existingIndex >= 0
+      ? regFile.registrations.map((r, i) => (i === existingIndex ? newEntry : r))
+      : [...regFile.registrations, newEntry];
   const updatedRegFile: RegistrationFile = {
     ...regFile,
-    registrations: [
-      ...regFile.registrations,
-      {
-        agentRegistry,
-        agentId: agentId.toString(),
-      },
-    ],
+    registrations: updatedRegistrations,
   };
 
   // ── Step 6: Re-upload the updated file to IPFS ──────────────────────────

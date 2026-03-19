@@ -10,7 +10,7 @@
 // time via setAgentURI(), and all clients get the new address automatically.
 //
 // Discovery flow:
-//   1. Read colorizer.json → registrations[0].agentId
+//   1. Read colorizer.json → registrations[last].agentId
 //      (if empty → throw with hint to run `npm run register`)
 //   2. publicClient.readContract tokenURI(agentId) → ipfs://<CID>
 //      (on-chain source of truth for the registration file)
@@ -86,8 +86,9 @@ const IDENTITY_REGISTRY_ABI = [
 
 /** One entry in services[] of the ERC-8004 registration file. */
 export interface ServiceEntry {
-  type: "a2a" | "mcp" | "web" | "oasf" | "ens" | "did" | "email" | string;
-  url: string;
+  name: string;
+  endpoint: string;
+  version?: string;
   description?: string;
 }
 
@@ -270,11 +271,11 @@ export async function discoverAgent(agentId: number): Promise<AgentInfo> {
   // Prefer the first service of type "a2a".
   // Agents that expose no A2A endpoint are valid ERC-8004 agents but cannot
   // be called via the A2A protocol — we treat that as an error here.
-  const a2aService = regFile.services.find(s => s.type === "a2a");
+  const a2aService = regFile.services.find(s => s.name.toLowerCase() === "a2a");
   if (!a2aService) {
     throw new Error(
       `Agent #${agentId} ("${regFile.name}") has no A2A service in its registration file.\n` +
-      `services: ${JSON.stringify(regFile.services.map(s => s.type))}`
+      `services: ${JSON.stringify(regFile.services.map(s => s.name))}`
     );
   }
 
@@ -284,7 +285,7 @@ export async function discoverAgent(agentId: number): Promise<AgentInfo> {
     agentId,
     agentIdentifier,
     agentURI,
-    endpoint: a2aService.url,
+    endpoint: a2aService.endpoint,
     owner,
     agentWallet,
     registrationFile: regFile,
@@ -305,13 +306,13 @@ export async function discoverColorizer(): Promise<AgentInfo> {
   try {
     const raw = await readFile(COLORIZER_REG_FILE, "utf-8");
     const regFile = JSON.parse(raw) as { registrations: Array<{ agentId: string }> };
-    const first = regFile.registrations[0];
+    const last = regFile.registrations[regFile.registrations.length - 1];
 
-    if (!first?.agentId) {
+    if (!last?.agentId) {
       throw new Error("registrations[] is empty");
     }
 
-    agentId = Number(first.agentId);
+    agentId = Number(last.agentId);
   } catch (err) {
     const detail = (err as Error).message;
     throw new Error(
@@ -375,7 +376,7 @@ async function main(): Promise<void> {
   ────────────────────────────────────────────────────────`);
 
   for (const svc of info.registrationFile.services) {
-    console.log(`  ${svc.type.padEnd(8)}: ${svc.url}`);
+    console.log(`  ${svc.name.padEnd(8)}: ${svc.endpoint}`);
   }
 
   console.log(`

@@ -33,9 +33,13 @@ const facilitator = isMock
   : new HTTPFacilitatorClient({ url: "https://x402.org/facilitator" });
 
 if (isMock) {
-  console.log(
-    "[x402 MOCK] Mock mode enabled — payments will be accepted without on-chain verification"
-  );
+  console.warn(`
+╔══════════════════════════════════════════════════════╗
+║  ⚠  MOCK MODE ACTIVE — PAYMENTS ARE NOT REAL        ║
+║  All x402 payments will be accepted without          ║
+║  on-chain verification. txHash will be FAKE.         ║
+║  Set X402_MOCK=false for real Base Sepolia payments. ║
+╚══════════════════════════════════════════════════════╝`);
 } else {
   console.log("[x402] Using Coinbase facilitator: https://x402.org/facilitator");
 }
@@ -52,13 +56,13 @@ await app.withPlugin(new IndexPagePlugin());
 
 // A2APlugin — mounts the agent behind the A2A protocol:
 //   POST /agent          → JSON-RPC task endpoint (payment-gated via x402)
-//   GET  /.well-known/agent-card.json → ERC-8004 registration file
+//   GET  /.well-known/agent-card.json → A2A Agent Card (separate from ERC-8004 registration file)
+//                                       ERC-8004 registration is stored on IPFS, see erc8004/registration/
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 await app.withPlugin(new A2APlugin(agent as any));
 
 // MCPPlugin — exposes tools over WebSocket at /mcp
-// Allows Claude Desktop, VS Code, and other MCP clients to call `colorize`
-// directly without going through the LLM layer
+// Allows Claude Desktop, VS Code, and other MCP clients to call `colorize` directly
 await app.withPlugin(new MCPPlugin([
   { name: "colorize", exports: colorize },
 ]));

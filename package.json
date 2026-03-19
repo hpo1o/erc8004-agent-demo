@@ -1,0 +1,10 @@
+{
+  "name": "erc8004-agent-demo",
+  "private": true,
+  "scripts": {
+    "test": "bun test tests/"
+  },
+  "devDependencies": {
+    "sharp": "^0.33"
+  }
+}
