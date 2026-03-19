@@ -55,7 +55,7 @@ try {
 } catch { /* .env absent — vars from shell */ }
 
 // ---------------------------------------------------------------------------
-// ABI — only validationRequest + ValidationRequest event.
+// ABI — validationRequest + validationResponse + their events.
 // Source: https://github.com/erc-8004/erc-8004-contracts/blob/main/abis/ValidationRegistry.json
 // ---------------------------------------------------------------------------
 const VALIDATION_REGISTRY_ABI = [
@@ -83,6 +83,34 @@ const VALIDATION_REGISTRY_ABI = [
       { indexed: true,  internalType: "bytes32", name: "requestHash",      type: "bytes32" },
     ],
     name: "ValidationRequest",
+    type: "event",
+  },
+  // validationResponse(requestHash, response, responseURI, responseHash, tag)
+  {
+    inputs: [
+      { internalType: "bytes32", name: "requestHash",  type: "bytes32" },
+      { internalType: "uint8",   name: "response",     type: "uint8"   },
+      { internalType: "string",  name: "responseURI",  type: "string"  },
+      { internalType: "bytes32", name: "responseHash", type: "bytes32" },
+      { internalType: "string",  name: "tag",          type: "string"  },
+    ],
+    name: "validationResponse",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // event ValidationResponse(address indexed validatorAddress, uint256 indexed agentId,
+  //                          string responseURI, bytes32 indexed requestHash, uint8 response)
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true,  internalType: "address", name: "validatorAddress", type: "address" },
+      { indexed: true,  internalType: "uint256", name: "agentId",          type: "uint256" },
+      { indexed: false, internalType: "string",  name: "responseURI",      type: "string"  },
+      { indexed: true,  internalType: "bytes32", name: "requestHash",      type: "bytes32" },
+      { indexed: false, internalType: "uint8",   name: "response",         type: "uint8"   },
+    ],
+    name: "ValidationResponse",
     type: "event",
   },
 ] as const;
@@ -119,6 +147,21 @@ export interface RequestValidationResult {
   txHash: Hash;
   /** bytes32 keccak256 of the request file — primary key in ValidationRegistry */
   requestHash: `0x${string}`;
+}
+
+export interface SubmitValidationResponseParams {
+  /** bytes32 requestHash returned by requestValidation() */
+  requestHash: `0x${string}`;
+  /** 0–100; 100 = passed, 0 = failed */
+  response: number;
+  agentId: number;
+  /** Address of the validator EOA (stored in the off-chain JSON). */
+  validatorAddress: string;
+  notes?: string;
+}
+
+export interface SubmitValidationResponseResult {
+  txHash: Hash;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,4 +317,85 @@ export async function requestValidation(
   }
 
   return { txHash, requestHash };
+}
+
+// ---------------------------------------------------------------------------
+// submitValidationResponse
+//
+// Called by the validator (here: self-attestation by the agent owner) after
+// requestValidation(). Records the pass/fail outcome on-chain and links to
+// an off-chain JSON file that describes the response in detail.
+// ---------------------------------------------------------------------------
+export async function submitValidationResponse(
+  params: SubmitValidationResponseParams
+): Promise<SubmitValidationResponseResult> {
+  const { requestHash, response, agentId, validatorAddress, notes } = params;
+
+  // ── Env ────────────────────────────────────────────────────────────────────
+  const pinatajwt = process.env.PINATA_JWT;
+  if (!pinatajwt) throw new Error("PINATA_JWT is not set");
+
+  const rpc = process.env.BASE_SEPOLIA_RPC ?? "https://sepolia.base.org";
+
+  // ── Registry config ────────────────────────────────────────────────────────
+  const raw = await readFile(CONTRACTS_FILE, "utf-8");
+  const { validationRegistry } = JSON.parse(raw) as {
+    validationRegistry: Address;
+  };
+
+  // ── Step 1: Build response file ───────────────────────────────────────────
+  const responseFile = {
+    requestHash,
+    response,
+    agentId,
+    validator: validatorAddress,
+    notes: notes ?? "Self-attested validation",
+    timestamp: new Date().toISOString(),
+  };
+
+  // ── Step 2: Upload to IPFS ─────────────────────────────────────────────────
+  const responseCID = await pinToIPFS(pinatajwt, responseFile);
+  const responseURI = `ipfs://${responseCID}`;
+
+  // ── Step 3: keccak256 of the canonical JSON ────────────────────────────────
+  const responseJson = JSON.stringify(responseFile);
+  const responseHash = keccak256(stringToBytes(responseJson));
+
+  // ── Step 4: Submit on-chain ────────────────────────────────────────────────
+  //
+  // The signer must be the validatorAddress that was registered in the request.
+  // In this demo it is the agent owner (ERC8004_PRIVATE_KEY).
+  const account = privateKeyToAccount(loadPrivateKey());
+
+  const publicClient = createPublicClient({
+    chain: baseSepolia,
+    transport: http(rpc),
+  });
+
+  const walletClient = createWalletClient({
+    account,
+    chain: baseSepolia,
+    transport: http(rpc),
+  });
+
+  const txHash = await walletClient.writeContract({
+    address: validationRegistry,
+    abi: VALIDATION_REGISTRY_ABI,
+    functionName: "validationResponse",
+    args: [requestHash, response, responseURI, responseHash, "grayscale-conversion"],
+    account,
+    chain: baseSepolia,
+  });
+
+  // ── Step 5: Wait for confirmation ─────────────────────────────────────────
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash: txHash,
+    confirmations: 1,
+  });
+
+  if (receipt.status !== "success") {
+    throw new Error(`validationResponse() tx reverted. Hash: ${txHash}`);
+  }
+
+  return { txHash };
 }

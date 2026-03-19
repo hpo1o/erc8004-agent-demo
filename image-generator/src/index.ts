@@ -24,7 +24,7 @@ import sharp from "sharp";
 import { generateImage } from "./dalle.js";
 import { sendToColorizer } from "./colorizer-client.js";
 import { submitFeedback } from "../../erc8004/scripts/reputation.js";
-import { requestValidation } from "../../erc8004/scripts/validation.js";
+import { requestValidation, submitValidationResponse } from "../../erc8004/scripts/validation.js";
 import { discoverColorizer } from "../../erc8004/scripts/discovery.js";
 
 // ---------------------------------------------------------------------------
@@ -212,6 +212,15 @@ async function main(): Promise<void> {
       console.log(`  ✓ Validation recorded on-chain`);
       console.log(`    requestHash : ${validation.requestHash}`);
       console.log(`    txHash      : ${validation.txHash}\n`);
+
+      const validationResponse = await submitValidationResponse({
+        requestHash: validation.requestHash,
+        response: 100,
+        agentId: colorizerAgentId,
+        validatorAddress: payerAccount.address,
+      });
+      console.log(`  ✓ Validation response submitted`);
+      console.log(`    txHash      : ${validationResponse.txHash}\n`);
     }
   } catch (validationErr) {
     const msg = validationErr instanceof Error ? validationErr.message : String(validationErr);
