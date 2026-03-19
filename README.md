@@ -1,5 +1,10 @@
 # ERC-8004 + x402 Reference Implementation
 
+![Tests](https://img.shields.io/badge/tests-17%20passing-green)
+![Network](https://img.shields.io/badge/network-Base%20Sepolia-blue)
+![ERC-8004](https://img.shields.io/badge/ERC--8004-Identity%20%2B%20Validation-orange)
+![x402](https://img.shields.io/badge/x402-real%20USDC-green)
+
 Эталонная реализация полного стека **ERC-8004 (Agent Identity) + A2A (Agent2Agent) + x402 (HTTP Payments)** на двух AI-агентах. Два агента взаимодействуют через открытые протоколы: Agent 1 находит Agent 2 через блокчейн, платит криптовалютой, получает результат — без заранее известных URL и без доверия к третьей стороне.
 
 **Публичный агент (Agent 2):** https://erc8004-agent-demo-production.up.railway.app
