@@ -61,10 +61,17 @@ async function main(): Promise<void> {
   requireEnv("OPENAI_API_KEY");
   requireEnv("PAYER_PRIVATE_KEY");
 
-  // ── Determine colorizer endpoint (ERC-8004 discovery or .env override) ───
+  // ── Determine colorizer endpoint + payment recipient ─────────────────────
+  //
+  // In dev mode (COLORIZER_URL set): use .env values for both.
+  // In production (discovery): read agentWallet from on-chain — it is the
+  // canonical payment recipient registered by the agent owner, not a
+  // manually configured env var that can drift out of sync.
   let colorizerEndpoint: string;
+  let colorizerPayTo: string;
   if (process.env.COLORIZER_URL) {
     colorizerEndpoint = process.env.COLORIZER_URL;
+    colorizerPayTo = process.env.PAYMENT_RECIPIENT_ADDRESS ?? "";
     console.log("Using COLORIZER_URL from .env (dev mode)");
   } else {
     console.log("Discovering Agent 2 via ERC-8004 registry...");
@@ -75,6 +82,7 @@ async function main(): Promise<void> {
       );
     }
     colorizerEndpoint = agentInfo.endpoint;
+    colorizerPayTo = agentInfo.agentWallet;   // on-chain source of truth
     console.log(`  ✓ Discovered: ${colorizerEndpoint} (agentId: ${agentInfo.agentId})\n`);
   }
 
@@ -149,7 +157,7 @@ async function main(): Promise<void> {
     ? payerPrivateKey
     : `0x${payerPrivateKey}`) as `0x${string}`;
   const payerAccount = privateKeyToAccount(normalizedKey);
-  const colorizerPayTo = process.env.PAYMENT_RECIPIENT_ADDRESS ?? "";
+  // colorizerPayTo is set above: agentWallet (discovery) or PAYMENT_RECIPIENT_ADDRESS (dev mode)
 
   // ── Step 4: Reputation feedback ───────────────────────────────────────────
   console.log("[4/5] Recording ERC-8004 reputation feedback...");
