@@ -367,6 +367,15 @@ export async function submitValidationResponse(
   // In this demo it is the agent owner (ERC8004_PRIVATE_KEY).
   const account = privateKeyToAccount(loadPrivateKey());
 
+  // ERC-8004 spec: a validator cannot respond to a request for an agent they own.
+  // Same wallet = self-validation → contract will revert.
+  if (validatorAddress.toLowerCase() === account.address.toLowerCase()) {
+    throw new Error(
+      "validator and agent owner are the same wallet (demo limitation). " +
+      "In production a separate validator EOA, zkML prover, or TEE oracle would respond."
+    );
+  }
+
   const publicClient = createPublicClient({
     chain: baseSepolia,
     transport: http(rpc),

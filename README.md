@@ -217,9 +217,16 @@ npm run check
 
 ### Validation Registry — честное описание
 
-- `requestValidation(validator, agentId, requestURI, requestHash)` создаёт immutable запись
-- В данной реализации `validator = 0x000...0` (self-attestation) — агент сам фиксирует хеши
+| Операция | Статус | Условие |
+|---|---|---|
+| Validation Request | ✅ on-chain | Всегда выполняется если agentId зарегистрирован |
+| Validation Response | ⚠ on-chain | Требует независимого валидатора; пропускается если validator = agent owner |
+
+- `requestValidation(validatorAddress, agentId, requestURI, requestHash)` создаёт immutable запись
+- `validatorAddress = owner EOA` — самоаттестация: агент фиксирует хеши входа и выхода
 - `requestURI` → IPFS JSON содержит `keccak256(inputImage)` и `keccak256(outputImage)`: любой внешний валидатор может воспроизвести grayscale конвертацию и проверить хеши
+- `validationResponse(requestHash, response, responseURI, responseHash, tag)` — ответ валидатора (0–100)
+- **Demo limitation**: контракт запрещает owner агента быть его же валидатором (аналогично self-feedback в Reputation Registry). В demo `submitValidationResponse()` пропускается с сообщением `⚠ Validation response skipped: ... (demo limitation)`.
 - **Это не верификация** — это audit trail. Реальная верификация: zkML prover, TEE oracle, или stake-secured re-execution агрегатором
 
 ---

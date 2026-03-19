@@ -213,14 +213,19 @@ async function main(): Promise<void> {
       console.log(`    requestHash : ${validation.requestHash}`);
       console.log(`    txHash      : ${validation.txHash}\n`);
 
-      const validationResponse = await submitValidationResponse({
-        requestHash: validation.requestHash,
-        response: 100,
-        agentId: colorizerAgentId,
-        validatorAddress: payerAccount.address,
-      });
-      console.log(`  ✓ Validation response submitted`);
-      console.log(`    txHash      : ${validationResponse.txHash}\n`);
+      try {
+        const validationResponse = await submitValidationResponse({
+          requestHash: validation.requestHash,
+          response: 100,
+          agentId: colorizerAgentId,
+          validatorAddress: payerAccount.address,
+        });
+        console.log(`  ✓ Validation response submitted`);
+        console.log(`    txHash      : ${validationResponse.txHash}\n`);
+      } catch (responseErr) {
+        const responseMsg = responseErr instanceof Error ? responseErr.message : String(responseErr);
+        console.log(`  ⚠ Validation response skipped: ${responseMsg}\n`);
+      }
     }
   } catch (validationErr) {
     const msg = validationErr instanceof Error ? validationErr.message : String(validationErr);
