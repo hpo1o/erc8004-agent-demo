@@ -125,6 +125,8 @@ export interface SubmitFeedbackParams {
   paymentTo: string;
   success: boolean;
   responseTimeMs: number;
+  /** A2A endpoint that was called — stored in the off-chain feedback file. */
+  endpoint: string;
 }
 
 export interface SubmitFeedbackResult {
@@ -216,7 +218,7 @@ export async function submitFeedback(
   // responseTimeMs is included in the off-chain file for richer off-chain
   // analytics but is not sent on-chain (contract stores only the numeric signal).
   const value = success ? 100 : 0;
-  const endpoint = "http://localhost:3000/agent";
+  const { endpoint } = params;
 
   const feedbackFile: FeedbackFile = {
     agentRegistry,

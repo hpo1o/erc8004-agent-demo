@@ -166,6 +166,7 @@ async function main(): Promise<void> {
         paymentTo: colorizerPayTo,
         success: true,
         responseTimeMs,
+        endpoint: colorizerEndpoint,
       });
       console.log(`  ✓ Feedback recorded`);
       console.log(`    feedbackIndex : ${feedback.feedbackIndex}`);

@@ -2,6 +2,7 @@
   "name": "erc8004-agent-demo",
   "private": true,
   "scripts": {
+    "install:all": "npm install --prefix colorizer-service && npm install --prefix image-generator && npm install --prefix erc8004",
     "test": "bun test tests/"
   },
   "devDependencies": {

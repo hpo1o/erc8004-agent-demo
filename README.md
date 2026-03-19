@@ -93,10 +93,7 @@
 ```bash
 git clone <repo>
 cd erc8004-agent-demo
-
-cd colorizer-service && npm install && cd ..
-cd image-generator   && npm install && cd ..
-cd erc8004           && npm install && cd ..
+npm run install:all
 ```
 
 ### 2. Настроить .env
