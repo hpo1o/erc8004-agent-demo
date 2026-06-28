@@ -3,10 +3,10 @@
 //
 // Reusable module — records an ERC-8004 validation request and response.
 
-Agent 2's owner signs validationRequest(), while Agent 1's payer wallet is
-selected as an independent validator and signs validationResponse(). A separate
-VALIDATOR_PRIVATE_KEY can be supplied to replace the payer with a dedicated
-validator.
+// Agent 2's owner signs validationRequest(), while Agent 1's payer wallet is
+// selected as an independent validator and signs validationResponse(). A separate
+// VALIDATOR_PRIVATE_KEY can be supplied to replace the payer with a dedicated
+// validator.
 //
 // Exports:
 //   requestValidation(params) → { txHash, requestHash }
