@@ -6,7 +6,8 @@
     "dev:direct": "node scripts/dev-direct.mjs",
     "start": "bun run scripts/dev-direct.mjs",
     "build": "aixyz build",
-    "register": "aixyz erc-8004 register"
+    "register": "aixyz erc-8004 register",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3",
