@@ -1,6 +1,6 @@
 # ERC-8004 + x402 Reference Implementation
 
-![Tests](https://img.shields.io/badge/tests-17%20passing-green)
+![CI](https://github.com/hpo1o/erc8004-agent-demo/actions/workflows/ci.yml/badge.svg)
 ![Network](https://img.shields.io/badge/network-Base%20Sepolia-blue)
 ![ERC-8004](https://img.shields.io/badge/ERC--8004-Identity%20%2B%20Validation-orange)
 ![x402](https://img.shields.io/badge/x402-real%20USDC-green)
@@ -19,7 +19,7 @@
 │                                                                     │
 │  npm start "a golden retriever"                                     │
 │         │                                                           │
-│  [1/5]  DALL-E 2 → imageBase64 (256×256 PNG)                        │
+│  [1/5]  GPT Image 2 → imageBase64 (768×768 PNG)                        │
 │         │                                                           │
 │  [2/5]  ERC-8004 Discovery ─────────────────────────────────────┐   │
 │         │  publicClient.readContract(tokenURI(2214))             │   │
@@ -30,9 +30,9 @@
 │         │                                                           │
 │  [2/5]  A2A message/send ──────────────────────────────────────┐   │
 │         │  POST /agent  →  HTTP 402 (payment required)          │   │
-│         │  parse X-PAYMENT-REQUIRED header                      │   │
+│         │  parse PAYMENT-REQUIRED header                      │   │
 │         │  sign EIP-3009 transferWithAuthorization (off-chain)   │   │
-│         │  retry POST /agent with X-PAYMENT header              │   │
+│         │  retry POST /agent with PAYMENT-SIGNATURE header              │   │
 │         │                                                        │   │
 │         │         ┌──────────────────────────────────────────┐   │   │
 │         │         │  Colorizer Service — Agent 2 (Railway)   │   │   │
@@ -139,7 +139,7 @@ Prompt: "a golden retriever in a sunlit meadow"
 Discovering Agent 2 via ERC-8004 registry...
   ✓ Discovered: https://erc8004-agent-demo-production.up.railway.app/agent (agentId: 2214)
 
-[1/5] Generating image with DALL-E 2...
+[1/5] Generating image with GPT Image 2...
   ✓ Image generated (≈38 KB as base64)
 
 [2/5] Sending to colorizer-service (Agent 2)...
@@ -147,7 +147,7 @@ Discovering Agent 2 via ERC-8004 registry...
 
 Агент 2 запрашивает оплату $0.01 USDC на Base Sepolia. Подтвердить? (y/n) > y
   → Подписываю платёж (EIP-3009)...
-  → Повторный запрос с X-PAYMENT заголовком...
+  → Повторный запрос с PAYMENT-SIGNATURE заголовком...
   ✓ Grayscale image received
 
 [3/5] Saving output.jpg...
@@ -169,8 +169,8 @@ Discovering Agent 2 via ERC-8004 registry...
 
 В этом проекте два кошелька играют разные роли:
 
-- **`PAYER_PRIVATE_KEY`** (`image-generator/.env`) — кошелёк **Agent 1**. Платит $0.01 USDC за каждый вызов colorizer. Подписывает `giveFeedback()` как клиент.
-- **`ERC8004_PRIVATE_KEY`** (`erc8004/.env`) — кошелёк **Agent 2**. Владеет NFT агента (agentId 2214) в Identity Registry.
+- **`PAYER_PRIVATE_KEY`** (`image-generator/.env`) — кошелёк **Agent 1**. Платит $0.01 USDC, подписывает `giveFeedback()` и выступает независимым валидатором.
+- **`ERC8004_PRIVATE_KEY`** (`erc8004/.env`) — кошелёк **Agent 2**. Владеет NFT агента (agentId 2214) и создаёт validation request.
 
 **ERC-8004 Reputation Registry запрещает self-feedback**: контракт отклоняет `giveFeedback()` если `msg.sender == agentOwner`. Если оба ключа одинаковые — Agent 1 является владельцем Agent 2, и шаг репутации будет пропущен с сообщением `⚠ Reputation feedback skipped`.
 
@@ -225,14 +225,13 @@ npm run check
 | Операция | Статус | Условие |
 |---|---|---|
 | Validation Request | ✅ on-chain | Всегда выполняется если agentId зарегистрирован |
-| Validation Response | ⚠ on-chain | Требует независимого валидатора; пропускается если validator = agent owner |
+| Validation Response | ✅ on-chain | Agent 1 (payer) выступает независимым валидатором |
 
 - `requestValidation(validatorAddress, agentId, requestURI, requestHash)` создаёт immutable запись
-- `validatorAddress = owner EOA` — самоаттестация: агент фиксирует хеши входа и выхода
-- `requestURI` → IPFS JSON содержит `keccak256(inputImage)` и `keccak256(outputImage)`: любой внешний валидатор может воспроизвести grayscale конвертацию и проверить хеши
-- `validationResponse(requestHash, response, responseURI, responseHash, tag)` — ответ валидатора (0–100)
-- **Demo limitation**: контракт запрещает owner агента быть его же валидатором (аналогично self-feedback в Reputation Registry). В demo `submitValidationResponse()` пропускается с сообщением `⚠ Validation response skipped: ... (demo limitation)`.
-- **Это не верификация** — это audit trail. Реальная верификация: zkML prover, TEE oracle, или stake-secured re-execution агрегатором
+- Agent 2 owner создаёт запрос и указывает адрес Agent 1 payer как `validatorAddress`.
+- Agent 1 подписывает `validationResponse()` своим `PAYER_PRIVATE_KEY`.
+- Для более сильной гарантии payer можно заменить отдельным zkML/TEE/stake-secured валидатором.
+- **Это воспроизводимая аттестация, а не доказательство вычисления** — вход и выход связаны on-chain хешами. Реальная верификация: zkML prover, TEE oracle, или stake-secured re-execution агрегатором
 
 ---
 
@@ -252,7 +251,7 @@ erc8004-agent-demo/
 ├── image-generator/            Agent 1 — CLI-клиент
 │   └── src/
 │       ├── index.ts            5 шагов: Discovery → DALL-E → A2A → Reputation → Validation
-│       ├── dalle.ts            DALL-E 2 256×256 base64
+│       ├── dalle.ts            GPT Image 2 768×768 base64
 │       └── colorizer-client.ts A2A + x402 платёжный флоу
 │
 ├── erc8004/                    ERC-8004 стек
@@ -272,7 +271,8 @@ erc8004-agent-demo/
 └── tests/                      Автотесты (bun test)
     ├── colorize.test.ts         Unit тест executeColorize()
     ├── registration.test.ts     ERC-8004 schema валидация
-    └── x402-flow.test.ts        x402 HTTP флоу без блокчейна
+    ├── x402-flow.test.ts        x402 HTTP флоу без блокчейна
+    └── config.test.ts           Регрессии моделей, заголовков и безопасных зависимостей
 ```
 
 ---
@@ -316,3 +316,18 @@ cd image-generator && npm start "a cat on a rooftop at sunset"
 | Image Generator (2215) | setAgentURI() | [0x9a816ba...](https://sepolia.basescan.org/tx/0x9a816ba4dc40d25b6dc375efb86a9957f5d8a70350c9210a789ec4ce6bc6aae5) |
 
 Исходный код контрактов: [github.com/erc-8004/erc-8004-contracts](https://github.com/erc-8004/erc-8004-contracts)
+
+
+---
+
+## Web frontend и собственный домен
+
+Рабочий сайт находится в `frontend/`. Для публичного развёртывания:
+
+1. Создайте Railway service с Root Directory = `/frontend`.
+2. Добавьте переменные из `frontend/.env.example`.
+3. Обязательно задайте `SERVICE_ACCESS_TOKEN`, чтобы посторонние не расходовали OpenAI credits и тестовый USDC.
+4. Healthcheck: `/health`.
+5. Подключите домен в Railway → Settings → Networking → Custom Domain и добавьте выданную CNAME-запись у DNS-провайдера.
+
+Подробности: [CUSTOM_DOMAIN.md](docs/CUSTOM_DOMAIN.md).
