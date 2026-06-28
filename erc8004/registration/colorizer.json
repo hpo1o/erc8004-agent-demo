@@ -13,7 +13,7 @@
       "name": "A2A",
       "endpoint": "https://erc8004-agent-demo-production.up.railway.app/agent",
       "version": "0.3.0",
-      "description": "Agent2Agent JSON-RPC endpoint (method: message/send). Payment-gated via x402: expects X-PAYMENT header with EIP-3009 signature on retry."
+      "description": "Agent2Agent JSON-RPC endpoint (method: message/send). Payment-gated via x402 v2: retry with the PAYMENT-SIGNATURE header."
     },
     {
       "name": "MCP",
