@@ -6,7 +6,7 @@
 // (https://x402.use-agently.com/facilitator).
 //
 // Why a mock facilitator instead of disabling x402 entirely?
-//   - The full x402 middleware still runs: the client must send X-PAYMENT header
+//   - The full x402 middleware still runs: the client must send PAYMENT-SIGNATURE header
 //   - The EIP-3009 signature is still created by the client
 //   - Only the on-chain settlement / remote verification is skipped
 //   - This lets you test the complete payment flow end-to-end without real funds
