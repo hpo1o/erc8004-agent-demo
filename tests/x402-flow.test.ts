@@ -7,7 +7,7 @@
 // What is covered:
 //   - 200 on first try → returns grayscale result, txHash = "no-payment-required"
 //   - Non-ok, non-402 response (5xx) → throws with status code
-//   - 402 without a valid X-PAYMENT-REQUIRED header → throws before prompting user
+//   - 402 without a valid PAYMENT-REQUIRED header → throws before prompting user
 // ---------------------------------------------------------------------------
 
 import { test, expect, mock, afterEach } from "bun:test";
@@ -106,7 +106,7 @@ test("5xx response: throws with status code in message", async () => {
   }
 });
 
-test("402 without X-PAYMENT-REQUIRED header: throws before prompting user", async () => {
+test("402 without PAYMENT-REQUIRED header: throws before prompting user", async () => {
   // Set a syntactically valid private key so createX402HttpClient() doesn't
   // fail on key format. The 402 has no payment header so the x402 client
   // should throw when trying to decode the payment requirements.

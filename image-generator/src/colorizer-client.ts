@@ -7,7 +7,7 @@
 //   1. POST /agent  →  HTTP 402  (payment required)
 //   2. Prompt user  →  y/n confirmation
 //   3. Sign payment off-chain (EIP-3009 / transferWithAuthorization)
-//   4. POST /agent with X-PAYMENT header  →  HTTP 200
+//   4. POST /agent with PAYMENT-SIGNATURE header  →  HTTP 200
 //   5. Return grayscale image + txHash
 // ---------------------------------------------------------------------------
 
@@ -264,7 +264,7 @@ export async function sendToColorizer(
   //
   // aixyz wraps the endpoint with x402 middleware which responds with:
   //   HTTP 402
-  //   X-PAYMENT-REQUIRED: <base64(PaymentRequired JSON)>
+  //   PAYMENT-REQUIRED: <base64(PaymentRequired JSON)>
   //
   // x402HTTPClient.getPaymentRequiredResponse() finds the right header
   // (case-insensitive) and decodes it — we pass both header getter and the
@@ -293,17 +293,17 @@ export async function sendToColorizer(
   //   3. Returns a PaymentPayload (pure data — no broadcast yet)
   //
   // encodePaymentSignatureHeader:
-  //   Serialises the payload to base64 and returns { "X-PAYMENT": "..." }
+  //   Serialises the payload to base64 and returns { "PAYMENT-SIGNATURE": "..." }
   console.log("  → Подписываю платёж (EIP-3009)...");
   const paymentPayload = await x402.createPaymentPayload(paymentRequired);
   const paymentHeaders = x402.encodePaymentSignatureHeader(paymentPayload);
 
   // ── Step 6: Retry with payment header ────────────────────────────────────
   //
-  // The facilitator (Agently) receives the X-PAYMENT header, verifies the
+  // The facilitator (Agently) receives the PAYMENT-SIGNATURE header, verifies the
   // signature on-chain, and if valid, settles the USDC transfer.
   // The server then processes the request normally.
-  console.log("  → Повторный запрос с X-PAYMENT заголовком...");
+  console.log("  → Повторный запрос с PAYMENT-SIGNATURE заголовком...");
   let paidRes: Response;
   try {
     paidRes = await fetch(colorizerUrl, {
@@ -326,7 +326,7 @@ export async function sendToColorizer(
   }
 
   // ── Step 7: Extract txHash from settlement header ─────────────────────────
-  let txHash = "(нет X-PAYMENT-RESPONSE — асинхронный расчёт)";
+  let txHash = "(нет PAYMENT-RESPONSE — асинхронный расчёт)";
   try {
     const settle = x402.getPaymentSettleResponse((h) => paidRes.headers.get(h));
     txHash = settle.transaction;

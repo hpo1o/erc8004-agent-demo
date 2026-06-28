@@ -83,6 +83,11 @@
         </div>
       </div>
 
+      <div class="access-row">
+        <label for="access-token">Access token <span>only if enabled by the owner</span></label>
+        <input id="access-token" type="password" autocomplete="off" placeholder="Optional service token" />
+      </div>
+
       <button class="btn btn-primary" id="generate-btn">
         <span class="btn-text">Generate &amp; Colorize</span>
         <span class="btn-arrow">→</span>
@@ -117,12 +122,12 @@
         <div class="result-label">
           <span class="result-icon">◈</span>
           <span>Original</span>
-          <span class="result-badge">DALL-E 2</span>
+          <span class="result-badge">GPT Image 2</span>
         </div>
         <div class="image-wrap">
           <img id="input-image" src="" alt="Original" class="result-img" />
         </div>
-        <p class="result-meta" id="input-meta">256 × 256 · PNG</p>
+        <p class="result-meta" id="input-meta">GPT Image 2 · optimized PNG</p>
       </div>
 
       <!-- Grayscale output -->

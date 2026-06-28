@@ -8,7 +8,7 @@
 //
 // What happens:
 //   1. Read the text prompt from argv
-//   2. Generate a 256x256 image with DALL-E 2 (returns base64)
+//   2. Generate a 256x256 image with GPT Image 2 (returns base64)
 //   3. Send the image to Agent 2 (colorizer-service) via A2A
 //      → receives HTTP 402, prompts user, pays via x402
 //   4. Receive the grayscale PNG, convert to JPEG, save as output.jpg
@@ -99,8 +99,8 @@ async function main(): Promise<void> {
   console.log("\n=== image-generator ===");
   console.log(`Prompt: "${prompt}"\n`);
 
-  // ── Step 1: Generate image with DALL-E 2 ─────────────────────────────────
-  console.log("[1/5] Generating image with DALL-E 2...");
+  // ── Step 1: Generate image with GPT Image 2 ─────────────────────────────────
+  console.log("[1/5] Generating image with GPT Image 2...");
   const imageBase64 = await generateImage(prompt);
   const inputKb = Math.round((imageBase64.length * 3) / 4 / 1024);
   console.log(`  ✓ Image generated (≈${inputKb} KB as base64)\n`);
@@ -208,6 +208,7 @@ async function main(): Promise<void> {
         contextId,
         taskId,
         paymentTxHash: txHash,
+        validatorAddress: payerAccount.address,
       });
       console.log(`  ✓ Validation recorded on-chain`);
       console.log(`    requestHash : ${validation.requestHash}`);

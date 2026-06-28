@@ -8,8 +8,8 @@
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
-import express, { type Request, type Response } from "express";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import express, { type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import sharp from "sharp";
 import OpenAI from "openai";
@@ -109,6 +109,12 @@ const REPUTATION_ABI = [
     name: "NewFeedback", type: "event",
   },
   {
+    inputs: [{ internalType: "uint256", name: "agentId", type: "uint256" }],
+    name: "getClients",
+    outputs: [{ internalType: "address[]", name: "", type: "address[]" }],
+    stateMutability: "view", type: "function",
+  },
+  {
     inputs: [
       { internalType: "uint256",   name: "agentId",         type: "uint256"   },
       { internalType: "address[]", name: "clientAddresses", type: "address[]" },
@@ -185,14 +191,17 @@ function publicClient() {
   return createPublicClient({ chain: baseSepolia, transport: http(rpc) });
 }
 
-function erc8004WalletClient() {
-  const raw = process.env.ERC8004_PRIVATE_KEY;
-  if (!raw) throw new Error("ERC8004_PRIVATE_KEY is not set");
+function walletClientFromEnv(name: "ERC8004_PRIVATE_KEY" | "PAYER_PRIVATE_KEY") {
+  const raw = process.env[name];
+  if (!raw) throw new Error(`${name} is not set`);
   const key = (raw.startsWith("0x") ? raw : `0x${raw}`) as `0x${string}`;
   const account = privateKeyToAccount(key);
   const rpc = process.env.BASE_SEPOLIA_RPC ?? "https://sepolia.base.org";
   return { account, wallet: createWalletClient({ account, chain: baseSepolia, transport: http(rpc) }) };
 }
+
+const agentOwnerWalletClient = () => walletClientFromEnv("ERC8004_PRIVATE_KEY");
+const payerWalletClient = () => walletClientFromEnv("PAYER_PRIVATE_KEY");
 
 // ---------------------------------------------------------------------------
 // IPFS helper
@@ -290,20 +299,26 @@ async function discoverColorizer(): Promise<AgentInfo> {
 }
 
 // ---------------------------------------------------------------------------
-// DALL-E 2 image generation
+// GPT Image 2 image generation
 // ---------------------------------------------------------------------------
 async function generateImage(prompt: string): Promise<string> {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const model = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
   const response = await client.images.generate({
-    model: "dall-e-2",
+    model,
     prompt,
     n: 1,
-    size: "256x256",
-    response_format: "b64_json",
+    size: "1024x1024",
+    quality: "low",
   });
   const b64 = response.data?.[0]?.b64_json;
-  if (!b64) throw new Error("DALL-E returned empty response (no b64_json)");
-  return b64;
+  if (!b64) throw new Error("OpenAI returned an empty image response");
+
+  const optimized = await sharp(Buffer.from(b64, "base64"))
+    .resize({ width: 768, height: 768, fit: "inside", withoutEnlargement: true })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  return optimized.toString("base64");
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +400,7 @@ async function sendToColorizerWeb(
   const paymentPayload = await x402Http.createPaymentPayload(paymentRequired);
   const paymentHeaders = x402Http.encodePaymentSignatureHeader(paymentPayload);
 
-  emit({ type: "log", message: "→ Retrying with X-PAYMENT header..." });
+  emit({ type: "log", message: "→ Retrying with PAYMENT-SIGNATURE header..." });
   const paidRes = await fetch(colorizerUrl, {
     method: "POST", headers: { "Content-Type": "application/json", ...paymentHeaders }, body,
   });
@@ -412,10 +427,10 @@ async function submitFeedback(params: {
   const { agentId, contextId, taskId, paymentTxHash, paymentFrom, paymentTo,
           success, responseTimeMs, endpoint } = params;
 
-  const { account, wallet } = erc8004WalletClient();
+  const { account, wallet } = payerWalletClient();
 
-  if (paymentFrom.toLowerCase() === account.address.toLowerCase()) {
-    throw new Error("client and agent owner are the same wallet (demo limitation)");
+  if (paymentFrom.toLowerCase() !== account.address.toLowerCase()) {
+    throw new Error(`PAYER_PRIVATE_KEY resolves to ${account.address}, but paymentFrom is ${paymentFrom}`);
   }
 
   const value = success ? 100 : 0;
@@ -453,11 +468,11 @@ async function submitFeedback(params: {
 // ---------------------------------------------------------------------------
 async function submitValidationRequest(params: {
   agentId: number; inputImageHash: `0x${string}`; outputImageHash: `0x${string}`;
-  contextId: string; taskId: string; paymentTxHash: string;
+  contextId: string; taskId: string; paymentTxHash: string; validatorAddress: Address;
 }): Promise<{ txHash: Hash; requestHash: `0x${string}` }> {
-  const { agentId, inputImageHash, outputImageHash, contextId, taskId, paymentTxHash } = params;
+  const { agentId, inputImageHash, outputImageHash, contextId, taskId, paymentTxHash, validatorAddress } = params;
 
-  const { account, wallet } = erc8004WalletClient();
+  const { account, wallet } = agentOwnerWalletClient();
 
   const requestFile = {
     agentRegistry: AGENT_REGISTRY_STR, agentId,
@@ -475,7 +490,7 @@ async function submitValidationRequest(params: {
 
   const txHash = await wallet.writeContract({
     address: VALIDATION_REGISTRY, abi: VALIDATION_ABI, functionName: "validationRequest",
-    args: [account.address, BigInt(agentId), requestURI, requestHash],
+    args: [validatorAddress, BigInt(agentId), requestURI, requestHash],
     account, chain: baseSepolia,
   });
 
@@ -494,10 +509,10 @@ async function submitValidationResponse(params: {
 }): Promise<{ txHash: Hash }> {
   const { requestHash, response, agentId, validatorAddress, notes } = params;
 
-  const { account, wallet } = erc8004WalletClient();
+  const { account, wallet } = payerWalletClient();
 
-  if (validatorAddress.toLowerCase() === account.address.toLowerCase()) {
-    throw new Error("validator and agent owner are the same wallet (demo limitation)");
+  if (validatorAddress.toLowerCase() !== account.address.toLowerCase()) {
+    throw new Error(`Validator key resolves to ${account.address}, but request expects ${validatorAddress}`);
   }
 
   const responseFile = {
@@ -528,9 +543,25 @@ async function submitValidationResponse(params: {
 // ---------------------------------------------------------------------------
 async function readReputation(agentId: number) {
   const client = publicClient();
+  const clients = await client.readContract({
+    address: REPUTATION_REGISTRY, abi: REPUTATION_ABI, functionName: "getClients",
+    args: [BigInt(agentId)],
+  }) as readonly Address[];
+
+  if (clients.length === 0) {
+    return {
+      agentId,
+      agentName: "Colorizer Service",
+      agentIdentifier: `${AGENT_REGISTRY_STR}/${agentId}`,
+      totalCalls: 0,
+      successRate: 0,
+      summaryValue: 0,
+    };
+  }
+
   const [count, summaryValue] = await client.readContract({
     address: REPUTATION_REGISTRY, abi: REPUTATION_ABI, functionName: "getSummary",
-    args: [BigInt(agentId), [], "successRate", ""],
+    args: [BigInt(agentId), [...clients], "successRate", ""],
   });
   const totalCalls = Number(count);
   const successRate = totalCalls === 0 ? 0 : Math.round(Number(summaryValue) / totalCalls);
@@ -568,7 +599,7 @@ async function runPipeline(
   // ── Step 2: Generate or receive image ────────────────────────────────────
   let imageBase64: string;
   if (input.type === "prompt") {
-    emit({ type: "step", n: 2, total: TOTAL, label: "Generating image with DALL-E 2..." });
+    emit({ type: "step", n: 2, total: TOTAL, label: "Generating image with GPT Image 2..." });
     imageBase64 = await generateImage(input.prompt);
     emit({ type: "log", message: `✓ Image generated (≈${Math.round((imageBase64.length * 3) / 4 / 1024)} KB)` });
   } else {
@@ -623,7 +654,7 @@ async function runPipeline(
       const outputHash = keccak256(stringToBytes(grayscaleBase64));
       const val = await submitValidationRequest({
         agentId: COLORIZER_AGENT_ID, inputImageHash: inputHash, outputImageHash: outputHash,
-        contextId, taskId, paymentTxHash: txHash,
+        contextId, taskId, paymentTxHash: txHash, validatorAddress: payerAccount.address,
       });
       requestHash = val.requestHash;
       validationTxHash = val.txHash;
@@ -654,9 +685,71 @@ async function runPipeline(
 // Express
 // ---------------------------------------------------------------------------
 const app = express();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
 
-app.use(express.json());
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 5, parts: 6 },
+  fileFilter: (_req, file, callback) => {
+    callback(null, file.mimetype.startsWith("image/"));
+  },
+});
+
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const rateWindowMs = Number(process.env.PROCESS_RATE_LIMIT_WINDOW_MS ?? 60 * 60 * 1000);
+const rateMax = Number(process.env.PROCESS_RATE_LIMIT_MAX ?? 10);
+
+function processRateLimit(req: Request, res: Response, next: NextFunction): void {
+  const key = req.ip ?? req.socket.remoteAddress ?? "unknown";
+  const now = Date.now();
+  if (rateBuckets.size > 10_000) {
+    for (const [bucketKey, value] of rateBuckets) {
+      if (value.resetAt <= now) rateBuckets.delete(bucketKey);
+    }
+  }
+  const current = rateBuckets.get(key);
+  const bucket = !current || current.resetAt <= now
+    ? { count: 0, resetAt: now + rateWindowMs }
+    : current;
+  bucket.count += 1;
+  rateBuckets.set(key, bucket);
+
+  res.setHeader("X-RateLimit-Limit", String(rateMax));
+  res.setHeader("X-RateLimit-Remaining", String(Math.max(0, rateMax - bucket.count)));
+  res.setHeader("X-RateLimit-Reset", String(Math.ceil(bucket.resetAt / 1000)));
+
+  if (bucket.count > rateMax) {
+    res.setHeader("Retry-After", String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
+    res.status(429).json({ error: "Too many generation requests. Try again later." });
+    return;
+  }
+  next();
+}
+
+function requireAccessToken(req: Request, res: Response, next: NextFunction): void {
+  const expected = process.env.SERVICE_ACCESS_TOKEN;
+  if (!expected) {
+    next();
+    return;
+  }
+  const supplied = req.get("x-service-token") ?? "";
+  const valid = supplied.length === expected.length &&
+    timingSafeEqual(Buffer.from(supplied), Buffer.from(expected));
+  if (!valid) {
+    res.status(401).json({ error: "Invalid or missing service access token." });
+    return;
+  }
+  next();
+}
+
+app.use(express.json({ limit: "32kb" }));
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
 app.use(express.static(resolve(__dir, "public")));
 
 app.get("/health", (_req, res) => {
@@ -671,31 +764,43 @@ app.get("/api/reputation", async (_req, res) => {
   }
 });
 
-app.post("/api/process", upload.single("image"), async (req: Request, res: Response) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.flushHeaders();
+app.post(
+  "/api/process",
+  processRateLimit,
+  requireAccessToken,
+  upload.single("image"),
+  async (req: Request, res: Response) => {
+    const input: Parameters<typeof runPipeline>[0] = req.file
+      ? { type: "upload", buffer: req.file.buffer, mimeType: req.file.mimetype }
+      : { type: "prompt", prompt: (req.body as { prompt?: string }).prompt ?? "" };
 
-  const emit = makeSseEmitter(res);
-  const input: Parameters<typeof runPipeline>[0] = req.file
-    ? { type: "upload", buffer: req.file.buffer, mimeType: req.file.mimetype }
-    : { type: "prompt", prompt: (req.body as { prompt?: string }).prompt ?? "" };
+    if (input.type === "prompt") {
+      input.prompt = input.prompt.trim();
+      if (!input.prompt || input.prompt.length > 2000) {
+        res.status(400).json({ error: "Prompt must contain 1–2000 characters." });
+        return;
+      }
+    }
 
-  if (input.type === "prompt" && !input.prompt.trim()) {
-    emit({ type: "error", message: "No prompt provided." });
-    res.end();
-    return;
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const emit = makeSseEmitter(res);
+    try {
+      await runPipeline(input, emit);
+    } catch (err) {
+      emit({ type: "error", message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      res.end();
+    }
   }
+);
 
-  try {
-    await runPipeline(input, emit);
-  } catch (err) {
-    emit({ type: "error", message: err instanceof Error ? err.message : String(err) });
-  } finally {
-    res.end();
-  }
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  const message = err instanceof Error ? err.message : "Invalid request";
+  res.status(400).json({ error: message });
 });
 
 const PORT = Number(process.env.PORT ?? 3001);

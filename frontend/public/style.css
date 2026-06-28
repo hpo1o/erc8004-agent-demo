@@ -197,6 +197,39 @@ body {
   box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
 }
 
+.access-row {
+  margin: 18px 0 14px;
+}
+.access-row label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.access-row label span {
+  color: var(--text-3);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.access-row input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(0,0,0,0.35);
+  color: var(--text-1);
+  padding: 11px 13px;
+  outline: none;
+}
+.access-row input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+}
+
 .example-prompts {
   display: flex;
   flex-wrap: wrap;

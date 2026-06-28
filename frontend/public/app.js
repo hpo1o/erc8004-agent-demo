@@ -11,6 +11,7 @@ let isProcessing = false;
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 const generateBtn     = document.getElementById("generate-btn");
 const promptInput     = document.getElementById("prompt-input");
+const accessTokenInput = document.getElementById("access-token");
 const terminalSection = document.getElementById("terminal-section");
 const terminalBody    = document.getElementById("terminal-body");
 const progressBar     = document.getElementById("progress-bar");
@@ -296,6 +297,7 @@ async function readSSEStream(response) {
   const decoder = new TextDecoder();
   let buffer = "";
 
+  let receivedTerminalEvent = false;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -312,12 +314,18 @@ async function readSSEStream(response) {
         if (!line.startsWith("data: ")) continue;
         try {
           const event = JSON.parse(line.slice(6));
+          if (event.type === "done" || event.type === "error") receivedTerminalEvent = true;
           handleSSEEvent(event);
         } catch {
           // malformed JSON — ignore
         }
       }
     }
+  }
+
+  if (!receivedTerminalEvent) {
+    logLine("✗ Connection closed before the operation completed.", "normal");
+    setLoading(false);
   }
 }
 
@@ -396,15 +404,21 @@ generateBtn.addEventListener("click", async () => {
 
   // Build request
   let response;
+  const serviceToken = accessTokenInput.value.trim();
+  const authHeaders = serviceToken ? { "x-service-token": serviceToken } : {};
   try {
     if (activeTab === "upload" && uploadedFile) {
       const formData = new FormData();
       formData.append("image", uploadedFile);
-      response = await fetch("/api/process", { method: "POST", body: formData });
+      response = await fetch("/api/process", {
+        method: "POST",
+        headers: authHeaders,
+        body: formData,
+      });
     } else {
       response = await fetch("/api/process", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ prompt: promptInput.value.trim() }),
       });
     }

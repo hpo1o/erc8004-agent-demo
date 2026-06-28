@@ -17,7 +17,7 @@
 //
 // Required env vars:
 //   PINATA_JWT          — Pinata JWT for IPFS uploads
-//   ERC8004_PRIVATE_KEY — private key of the paying wallet (= paymentFrom)
+//   PAYER_PRIVATE_KEY   — private key of the paying/client wallet (= paymentFrom)
 //   BASE_SEPOLIA_RPC    — optional, default: https://sepolia.base.org
 // ---------------------------------------------------------------------------
 
@@ -47,6 +47,9 @@ const CONTRACTS_FILE = resolve(ERC8004_ROOT, "contracts", "registry-addresses.js
 try {
   process.loadEnvFile(resolve(ERC8004_ROOT, ".env"));
 } catch { /* .env absent — vars from shell */ }
+try {
+  process.loadEnvFile(resolve(ERC8004_ROOT, "../image-generator/.env"));
+} catch { /* CLI env may be supplied by the shell */ }
 
 // ---------------------------------------------------------------------------
 // ABI — only giveFeedback + NewFeedback event.
@@ -174,9 +177,9 @@ async function pinToIPFS(jwt: string, content: unknown): Promise<string> {
   return data.IpfsHash;
 }
 
-function loadPrivateKey(): `0x${string}` {
-  const raw = process.env.ERC8004_PRIVATE_KEY;
-  if (!raw) throw new Error("ERC8004_PRIVATE_KEY is not set");
+function loadPayerPrivateKey(): `0x${string}` {
+  const raw = process.env.PAYER_PRIVATE_KEY;
+  if (!raw) throw new Error("PAYER_PRIVATE_KEY is not set");
   return (raw.startsWith("0x") ? raw : `0x${raw}`) as `0x${string}`;
 }
 
@@ -255,17 +258,13 @@ export async function submitFeedback(
   const feedbackHash = keccak256(stringToBytes(feedbackJson));
 
   // ── Step 4: Submit on-chain ────────────────────────────────────────────────
-  const account = privateKeyToAccount(loadPrivateKey());
+  const account = privateKeyToAccount(loadPayerPrivateKey());
 
-  // ERC-8004 spec: "The feedback submitter MUST NOT be the agent owner or an
-  // approved operator for agentId." In this demo both agents share one wallet,
-  // so the caller (paymentFrom) is the same address as the agent owner —
-  // the contract will revert with "Self-feedback not allowed".
-  // Skip gracefully instead of letting the revert surface as a raw error.
-  if (paymentFrom.toLowerCase() === account.address.toLowerCase()) {
+  // The feedback client recorded off-chain must be the transaction signer.
+  // The registry itself rejects the signer if it owns or operates agentId.
+  if (paymentFrom.toLowerCase() !== account.address.toLowerCase()) {
     throw new Error(
-      "client and agent owner are the same wallet (demo limitation). " +
-      "In production, Agent 1 and Agent 2 would be owned by different wallets."
+      `PAYER_PRIVATE_KEY resolves to ${account.address}, but paymentFrom is ${paymentFrom}`
     );
   }
 
