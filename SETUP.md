@@ -1,7 +1,7 @@
 # Setup Guide — ERC-8004 + x402 Reference Implementation
 
 Пошаговая инструкция для запуска демо:
-**ERC-8004 Discovery → DALL-E 2 → x402 оплата → grayscale → output.jpg**
+**ERC-8004 Discovery → GPT Image 2 → x402 оплата → grayscale → output.jpg**
 
 Agent 2 (Colorizer Service) работает публично на Railway:
 **https://erc8004-agent-demo-production.up.railway.app**
@@ -14,7 +14,7 @@ Image Generator находит его автоматически через бл
 
 | Что | Зачем |
 |---|---|
-| OpenAI API key | Agent 1 генерирует изображение через DALL-E 2 |
+| OpenAI API key | Agent 1 генерирует изображение через GPT Image 2 |
 | MetaMask кошелёк (два адреса) | Плательщик (Agent 1) и владелец агента (Agent 2) — см. ниже |
 | Тестовый ETH на Base Sepolia | Оплата gas транзакций |
 | Тестовый USDC на Base Sepolia | $0.01 за каждую конвертацию |
@@ -25,7 +25,7 @@ Image Generator находит его автоматически через бл
 
 1. Зайди на **https://platform.openai.com/api-keys**
 2. Нажми **"Create new secret key"**, скопируй ключ
-3. Убедись что есть кредиты (~$0.002 за DALL-E 2 / 256px)
+3. Убедись, что API-проект имеет доступ к GPT Image 2 и положительный баланс
 
 ---
 
@@ -98,13 +98,8 @@ PAYER_PRIVATE_KEY=0x...         # приватный ключ "Agent 1 Payer"
 COLORIZER_URL=                  # ОСТАВИТЬ ПУСТЫМ — используется ERC-8004 discovery
 ```
 
-Опционально (для on-chain репутации):
-```dotenv
-PINATA_JWT=eyJ...               # JWT от app.pinata.cloud/developers/api-keys
-ERC8004_PRIVATE_KEY=0x...       # тот же ключ что PAYER_PRIVATE_KEY (Agent 1 подаёт feedback)
-BASE_SEPOLIA_RPC=https://sepolia.base.org
-PAYMENT_RECIPIENT_ADDRESS=0x... # адрес "Agent 2 Owner" (получает USDC)
-```
+On-chain репутацию Agent 1 подписывает уже указанным `PAYER_PRIVATE_KEY`.
+`PINATA_JWT` и ключ владельца Agent 2 задаются в `erc8004/.env` ниже.
 
 ### erc8004/.env (нужен только для перерегистрации агентов)
 
@@ -153,7 +148,7 @@ Prompt: "a golden retriever in a sunlit meadow"
 Discovering Agent 2 via ERC-8004 registry...
   ✓ Discovered: https://erc8004-agent-demo-production.up.railway.app/agent (agentId: 2214)
 
-[1/5] Generating image with DALL-E 2...
+[1/5] Generating image with GPT Image 2...
   ✓ Image generated (≈38 KB as base64)
 
 [2/5] Sending to colorizer-service (Agent 2)...
@@ -161,14 +156,15 @@ Discovering Agent 2 via ERC-8004 registry...
 
 Агент 2 запрашивает оплату $0.01 USDC на Base Sepolia. Подтвердить? (y/n) > y
   → Подписываю платёж (EIP-3009)...
-  → Повторный запрос с X-PAYMENT заголовком...
+  → Повторный запрос с PAYMENT-SIGNATURE заголовком...
   ✓ Grayscale image received
 
 [3/5] Saving output.jpg...
 [4/5] Recording ERC-8004 reputation feedback...
   ✓ Feedback recorded
 [5/5] Submitting ERC-8004 validation request...
-  ✓ Validation recorded on-chain
+  ✓ Validation request recorded on-chain
+  ✓ Independent validation response submitted
 
 === Done ===
 ✓ Saved to: output.jpg
@@ -187,3 +183,14 @@ Discovering Agent 2 via ERC-8004 registry...
 | `Payment rejected` | Нет USDC на кошельке | Повтори Шаг 5 |
 | `Reputation feedback skipped` | Одинаковые кошельки | Используй два разных ключа |
 | `DALL-E: insufficient_quota` | Нет кредитов OpenAI | Пополни баланс |
+
+
+---
+
+## Публичный сайт и домен
+
+Для сайта разверните папку `frontend` как отдельный Railway service, перенесите
+переменные из `frontend/.env.example` и задайте `SERVICE_ACCESS_TOKEN`.
+После успешного healthcheck `/health` добавьте домен в Railway Networking и
+создайте CNAME-запись, которую покажет Railway. Полная инструкция:
+`docs/CUSTOM_DOMAIN.md`.
