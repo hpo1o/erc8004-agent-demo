@@ -24,7 +24,7 @@ test("frontend requires a patched Multer major version", () => {
   const pkg = JSON.parse(read("frontend/package.json")) as {
     dependencies: Record<string, string>;
   };
-  expect(pkg.dependencies.multer.startsWith("^2.")).toBe(true);
+  expect(pkg.dependencies.multer.replace(/^[~^]/, "").startsWith("2.")).toBe(true);
 });
 
 test("CI workflow and custom-domain guide are present", () => {
