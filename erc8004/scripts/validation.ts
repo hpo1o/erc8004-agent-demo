@@ -1,22 +1,12 @@
 // ---------------------------------------------------------------------------
 // erc8004/scripts/validation.ts
 //
-// Reusable module — records a self-attestation in the ERC-8004 Validation
-// Registry after each colorizer-service call.
-//
-// Why validation (not just reputation)?
-//   Reputation answers "did the client think the call was good?".
-//   Validation answers "was the output verifiably correct?".
-//   For a grayscale conversion the agent owner publishes a request
-//   containing hashes of both images. Any external validator (or the
-//   agent itself, as a self-attestation) can later verify that
-//   SHA(input) → SHA(output) matches a known-good grayscale transform.
-//
-// Self-attestation (validatorAddress = agent owner address):
-//   The agent owner signs the request and also acts as the validator —
-//   asserting that the conversion happened as described. Zero address is not
-//   accepted by the contract ("bad validator"). In production this would be
-//   a zkML prover or TEE oracle address; for the demo the owner EOA is used.
+// Reusable module — records an ERC-8004 validation request and response.
+
+Agent 2's owner signs validationRequest(), while Agent 1's payer wallet is
+selected as an independent validator and signs validationResponse(). A separate
+VALIDATOR_PRIVATE_KEY can be supplied to replace the payer with a dedicated
+validator.
 //
 // Exports:
 //   requestValidation(params) → { txHash, requestHash }
@@ -53,6 +43,9 @@ const CONTRACTS_FILE = resolve(ERC8004_ROOT, "contracts", "registry-addresses.js
 try {
   process.loadEnvFile(resolve(ERC8004_ROOT, ".env"));
 } catch { /* .env absent — vars from shell */ }
+try {
+  process.loadEnvFile(resolve(ERC8004_ROOT, "../image-generator/.env"));
+} catch { /* CLI env may be supplied by the shell */ }
 
 // ---------------------------------------------------------------------------
 // ABI — validationRequest + validationResponse + their events.
@@ -100,15 +93,18 @@ const VALIDATION_REGISTRY_ABI = [
     type: "function",
   },
   // event ValidationResponse(address indexed validatorAddress, uint256 indexed agentId,
-  //                          string responseURI, bytes32 indexed requestHash, uint8 response)
+  //   bytes32 indexed requestHash, uint8 response, string responseURI,
+  //   bytes32 responseHash, string tag)
   {
     anonymous: false,
     inputs: [
       { indexed: true,  internalType: "address", name: "validatorAddress", type: "address" },
       { indexed: true,  internalType: "uint256", name: "agentId",          type: "uint256" },
-      { indexed: false, internalType: "string",  name: "responseURI",      type: "string"  },
       { indexed: true,  internalType: "bytes32", name: "requestHash",      type: "bytes32" },
       { indexed: false, internalType: "uint8",   name: "response",         type: "uint8"   },
+      { indexed: false, internalType: "string",  name: "responseURI",      type: "string"  },
+      { indexed: false, internalType: "bytes32", name: "responseHash",     type: "bytes32" },
+      { indexed: false, internalType: "string",  name: "tag",              type: "string"  },
     ],
     name: "ValidationResponse",
     type: "event",
@@ -141,6 +137,8 @@ export interface RequestValidationParams {
   contextId: string;
   taskId: string;
   paymentTxHash: string;
+  /** Independent validator that will submit the validation response. */
+  validatorAddress: string;
 }
 
 export interface RequestValidationResult {
@@ -167,10 +165,20 @@ export interface SubmitValidationResponseResult {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function loadPrivateKey(): `0x${string}` {
-  const raw = process.env.ERC8004_PRIVATE_KEY;
-  if (!raw) throw new Error("ERC8004_PRIVATE_KEY is not set");
+function normalizePrivateKey(raw: string): `0x${string}` {
   return (raw.startsWith("0x") ? raw : `0x${raw}`) as `0x${string}`;
+}
+
+function loadOwnerPrivateKey(): `0x${string}` {
+  const raw = process.env.ERC8004_PRIVATE_KEY;
+  if (!raw) throw new Error("ERC8004_PRIVATE_KEY (Agent 2 owner) is not set");
+  return normalizePrivateKey(raw);
+}
+
+function loadValidatorPrivateKey(): `0x${string}` {
+  const raw = process.env.VALIDATOR_PRIVATE_KEY ?? process.env.PAYER_PRIVATE_KEY;
+  if (!raw) throw new Error("VALIDATOR_PRIVATE_KEY or PAYER_PRIVATE_KEY is not set");
+  return normalizePrivateKey(raw);
 }
 
 async function pinToIPFS(jwt: string, content: unknown): Promise<string> {
@@ -209,6 +217,7 @@ export async function requestValidation(
     contextId,
     taskId,
     paymentTxHash,
+    validatorAddress,
   } = params;
 
   // ── Env ────────────────────────────────────────────────────────────────────
@@ -265,7 +274,7 @@ export async function requestValidation(
   // of the agentId in the IdentityRegistry — not by a random address.
   // We use ERC8004_PRIVATE_KEY which should be the agent owner's key.
   //
-  const account = privateKeyToAccount(loadPrivateKey());
+  const account = privateKeyToAccount(loadOwnerPrivateKey());
 
   const publicClient = createPublicClient({
     chain: baseSepolia,
@@ -278,14 +287,14 @@ export async function requestValidation(
     transport: http(rpc),
   });
 
-  // validatorAddress = owner EOA — the agent owner self-attests this request.
-  // Zero address is rejected by the contract ("bad validator").
-  // In production this would be a dedicated zkML prover or TEE oracle address.
+  // The owner requests validation from an independent validator. In this demo
+  // Agent 1 (the payer) also acts as the validator, so the existing two-wallet
+  // setup is sufficient and self-validation is avoided.
   const txHash = await walletClient.writeContract({
     address: validationRegistry,
     abi: VALIDATION_REGISTRY_ABI,
     functionName: "validationRequest",
-    args: [account.address, BigInt(agentId), requestURI, requestHash],
+    args: [validatorAddress as Address, BigInt(agentId), requestURI, requestHash],
     account,
     chain: baseSepolia,
   });
@@ -322,7 +331,7 @@ export async function requestValidation(
 // ---------------------------------------------------------------------------
 // submitValidationResponse
 //
-// Called by the validator (here: self-attestation by the agent owner) after
+// Called by the independent validator after
 // requestValidation(). Records the pass/fail outcome on-chain and links to
 // an off-chain JSON file that describes the response in detail.
 // ---------------------------------------------------------------------------
@@ -363,16 +372,13 @@ export async function submitValidationResponse(
 
   // ── Step 4: Submit on-chain ────────────────────────────────────────────────
   //
-  // The signer must be the validatorAddress that was registered in the request.
-  // In this demo it is the agent owner (ERC8004_PRIVATE_KEY).
-  const account = privateKeyToAccount(loadPrivateKey());
+  // The response must be signed by the validator selected in the request.
+  // PAYER_PRIVATE_KEY is the default validator key for the two-wallet demo.
+  const account = privateKeyToAccount(loadValidatorPrivateKey());
 
-  // ERC-8004 spec: a validator cannot respond to a request for an agent they own.
-  // Same wallet = self-validation → contract will revert.
-  if (validatorAddress.toLowerCase() === account.address.toLowerCase()) {
+  if (validatorAddress.toLowerCase() !== account.address.toLowerCase()) {
     throw new Error(
-      "validator and agent owner are the same wallet (demo limitation). " +
-      "In production a separate validator EOA, zkML prover, or TEE oracle would respond."
+      `Validator key resolves to ${account.address}, but request expects ${validatorAddress}`
     );
   }
 
