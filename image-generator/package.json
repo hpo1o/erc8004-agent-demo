@@ -10,7 +10,7 @@
   "dependencies": {
     "@x402/core": "^2.7.0",
     "@x402/evm": "^2.7.0",
-    "openai": "^4",
+    "openai": "6.45.0",
     "sharp": "^0.33",
     "viem": "^2"
   },
