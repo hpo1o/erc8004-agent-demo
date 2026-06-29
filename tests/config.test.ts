@@ -84,9 +84,11 @@ test("Vercel exposes explicit backend function entrypoints", () => {
 });
 
 
-test("frontend falls back locally when the registered colorizer is unavailable", () => {
+test("frontend local fallback is explicit and development-only", () => {
   const source = read("frontend/server.ts");
   expect(source).toContain("usedLocalColorizer");
+  expect(source).toContain('process.env.ALLOW_LOCAL_COLORIZER_FALLBACK === "true"');
+  expect(source).toContain("No fallback was used, so no x402 transaction was charged.");
   expect(source).toContain("Using the local grayscale fallback");
   expect(source).toContain(".grayscale()");
   expect(source).toContain('txHash: "local-fallback"');

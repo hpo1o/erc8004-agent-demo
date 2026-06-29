@@ -674,7 +674,15 @@ async function runPipeline(
     const endpointUnavailable =
       /(?:\b404\b|\b410\b|\b502\b|\b503\b|\b504\b|application not found|fetch failed|econnrefused|enotfound|timed?\s*out)/i.test(message);
 
-    if (!endpointUnavailable) throw err;
+    const allowLocalFallback = process.env.ALLOW_LOCAL_COLORIZER_FALLBACK === "true";
+    if (!endpointUnavailable || !allowLocalFallback) {
+      if (endpointUnavailable) {
+        throw new Error(
+          `Paid Agent 2 is unavailable (${message}). No fallback was used, so no x402 transaction was charged.`
+        );
+      }
+      throw err;
+    }
 
     usedLocalColorizer = true;
     emit({
