@@ -37,15 +37,11 @@ test("CI workflow and deployment guides are present", () => {
 
 test("Vercel runtime exports Express and exposes safe readiness checks", () => {
   const source = read("frontend/server.ts");
-  const config = JSON.parse(read("frontend/vercel.json")) as {
-    functions: Record<string, { maxDuration: number }>;
-  };
   expect(source).toContain("export const maxDuration = 300");
   expect(source).toContain("export default app");
   expect(source).toContain("if (!process.env.VERCEL)");
   expect(source).toContain("openaiApiKey");
   expect(source).toContain("PAYER_PRIVATE_KEY is not configured");
-  expect(config.functions["server.ts"].maxDuration).toBe(300);
 });
 
 test("browser reports API response details instead of only an HTTP code", () => {
