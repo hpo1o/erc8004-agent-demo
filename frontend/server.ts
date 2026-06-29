@@ -302,15 +302,38 @@ async function discoverColorizer(): Promise<AgentInfo> {
 // GPT Image 2 image generation
 // ---------------------------------------------------------------------------
 async function generateImage(prompt: string): Promise<string> {
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const model = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
-  const response = await client.images.generate({
-    model,
-    prompt,
-    n: 1,
-    size: "1024x1024",
-    quality: "low",
-  });
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error(
+      "OPENAI_API_KEY is not configured. Add it in Vercel → Project Settings → Environment Variables, then redeploy."
+    );
+  }
+
+  const client = new OpenAI({ apiKey, timeout: 120_000, maxRetries: 1 });
+  const model = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2";
+
+  let response: Awaited<ReturnType<typeof client.images.generate>>;
+  try {
+    response = await client.images.generate({
+      model,
+      prompt,
+      n: 1,
+      size: "1024x1024",
+      quality: "low",
+    });
+  } catch (err) {
+    if (err instanceof OpenAI.APIError) {
+      const code = (err as InstanceType<typeof OpenAI.APIError> & { code?: string }).code;
+      const suffix = code ? `/${code}` : "";
+      let hint = "Check the OpenAI project, API key, and image-model access.";
+      if (err.status === 401) hint = "The Vercel OPENAI_API_KEY is invalid or expired.";
+      if (err.status === 403 || err.status === 404) hint = `The API project cannot access ${model}.`;
+      if (err.status === 429) hint = "The API project has no available quota or hit its image rate limit.";
+      throw new Error(`OpenAI image generation failed (HTTP ${err.status ?? "unknown"}${suffix}). ${hint}`);
+    }
+    throw new Error(`OpenAI image generation failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   const b64 = response.data?.[0]?.b64_json;
   if (!b64) throw new Error("OpenAI returned an empty image response");
 
@@ -389,7 +412,16 @@ async function sendToColorizerWeb(
 
   const responseBody = await initialRes.json().catch(() => null);
   const x402Core = new x402Client();
-  const payerKey = (process.env.PAYER_PRIVATE_KEY ?? "") as `0x${string}`;
+  const rawPayerKey = process.env.PAYER_PRIVATE_KEY?.trim();
+  if (!rawPayerKey) {
+    throw new Error(
+      "PAYER_PRIVATE_KEY is not configured. It is required when Agent 2 requests x402 payment."
+    );
+  }
+  const payerKey = (rawPayerKey.startsWith("0x") ? rawPayerKey : `0x${rawPayerKey}`) as `0x${string}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(payerKey)) {
+    throw new Error("PAYER_PRIVATE_KEY must be a 32-byte hexadecimal private key.");
+  }
   const payerAccount = privateKeyToAccount(payerKey);
   x402Core.register("eip155:84532", new ExactEvmScheme(payerAccount));
   const x402Http = new x402HTTPClient(x402Core);
@@ -753,7 +785,18 @@ app.use((_req, res, next) => {
 app.use(express.static(resolve(__dir, "public")));
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "erc8004-frontend", timestamp: new Date().toISOString() });
+  const checks = {
+    openaiApiKey: Boolean(process.env.OPENAI_API_KEY?.trim()),
+    payerPrivateKey: Boolean(process.env.PAYER_PRIVATE_KEY?.trim()),
+    serviceAccessToken: Boolean(process.env.SERVICE_ACCESS_TOKEN?.trim()),
+  };
+  res.json({
+    status: checks.openaiApiKey ? "ok" : "degraded",
+    service: "erc8004-frontend",
+    runtime: process.env.VERCEL ? "vercel" : "node",
+    checks,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.get("/api/reputation", async (_req, res) => {
@@ -785,7 +828,9 @@ app.post(
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders();
+    res.write(": connected\n\n");
 
     const emit = makeSseEmitter(res);
     try {
@@ -803,8 +848,13 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(400).json({ error: message });
 });
 
-const PORT = Number(process.env.PORT ?? 3001);
-app.listen(PORT, () => {
-  console.log(`\n  ERC-8004 + x402 Frontend`);
-  console.log(`  http://localhost:${PORT}\n`);
-});
+export const maxDuration = 300;
+export default app;
+
+if (!process.env.VERCEL) {
+  const PORT = Number(process.env.PORT ?? 3001);
+  app.listen(PORT, () => {
+    console.log(`\n  ERC-8004 + x402 Frontend`);
+    console.log(`  http://localhost:${PORT}\n`);
+  });
+}
