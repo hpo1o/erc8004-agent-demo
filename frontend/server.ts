@@ -26,7 +26,10 @@ import {
 import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { x402Client, x402HTTPClient } from "@x402/core/client";
+import { HTTPFacilitatorClient } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm";
+import { ExactEvmScheme as ExactEvmServerScheme } from "@x402/evm/exact/server";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
 
 // ---------------------------------------------------------------------------
 // Env
@@ -45,6 +48,8 @@ const REPUTATION_REGISTRY = "0x8004B663056A597Dffe9eCcC1965A193B7388713" as Addr
 const VALIDATION_REGISTRY = "0x8004Cb1BF31DAf7788923b405b754f57acEB4272" as Address;
 const AGENT_REGISTRY_STR  = `eip155:${CHAIN_ID}:${IDENTITY_REGISTRY}`;
 const FALLBACK_ENDPOINT   = "https://erc8004-agent-demo-production.up.railway.app/agent";
+const DEFAULT_AGENT_WALLET = "0x171c4E80E4cA6bBe95Eb38D9d226b52897350dBb" as Address;
+const X402_NETWORK        = "eip155:84532" as const;
 const IPFS_GATEWAYS       = [
   "https://gateway.pinata.cloud/ipfs/",
   "https://ipfs.io/ipfs/",
@@ -607,6 +612,16 @@ async function readReputation(agentId: number) {
   };
 }
 
+function embeddedColorizerEndpoint(): string {
+  const configured = process.env.COLORIZER_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) return `https://${vercelUrl}/api/agent`;
+
+  return `http://127.0.0.1:${process.env.PORT ?? "3001"}/api/agent`;
+}
+
 // ---------------------------------------------------------------------------
 // Main pipeline
 // ---------------------------------------------------------------------------
@@ -644,12 +659,16 @@ async function runPipeline(
 
   // ── Step 3: Send to colorizer-service ───────────────────────────────────
   emit({ type: "step", n: 3, total: TOTAL, label: "Sending to Agent 2 (colorizer)..." });
+  const colorizerEndpoint = embeddedColorizerEndpoint();
+  if (colorizerEndpoint !== agent.endpoint) {
+    emit({ type: "log", message: `→ Registered endpoint is unavailable; using embedded x402 Agent 2: ${colorizerEndpoint}` });
+  }
   const startMs = Date.now();
   let usedLocalColorizer = false;
   let colorizerResult: Awaited<ReturnType<typeof sendToColorizerWeb>>;
 
   try {
-    colorizerResult = await sendToColorizerWeb(imageBase64, agent.endpoint, emit);
+    colorizerResult = await sendToColorizerWeb(imageBase64, colorizerEndpoint, emit);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const endpointUnavailable =
@@ -706,7 +725,7 @@ async function runPipeline(
         agentId: COLORIZER_AGENT_ID, contextId, taskId,
         paymentTxHash: txHash, paymentFrom: payerAccount.address,
         paymentTo: agent.agentWallet, success: true,
-        responseTimeMs, endpoint: agent.endpoint,
+        responseTimeMs, endpoint: colorizerEndpoint,
       });
       emit({ type: "log", message: `✓ Feedback recorded (index: ${fb.feedbackIndex})` });
       emit({ type: "log", message: `  IPFS: ipfs://${fb.feedbackCID}` });
@@ -754,6 +773,30 @@ async function runPipeline(
 const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
+
+const paymentRecipient = (process.env.PAYMENT_RECIPIENT_ADDRESS?.trim() || DEFAULT_AGENT_WALLET) as Address;
+if (!/^0x[0-9a-fA-F]{40}$/.test(paymentRecipient)) {
+  throw new Error("PAYMENT_RECIPIENT_ADDRESS must be a valid EVM address.");
+}
+const facilitatorUrl = process.env.X402_FACILITATOR_URL?.trim() || "https://x402.org/facilitator";
+const resourceServer = new x402ResourceServer(new HTTPFacilitatorClient({ url: facilitatorUrl }))
+  .register(X402_NETWORK, new ExactEvmServerScheme());
+
+app.use(paymentMiddleware(
+  {
+    "POST /api/agent": {
+      accepts: [{
+        scheme: "exact",
+        price: "$0.01",
+        network: X402_NETWORK,
+        payTo: paymentRecipient,
+      }],
+      description: "Convert an image to grayscale with Agent 2",
+      mimeType: "application/json",
+    },
+  },
+  resourceServer
+));
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -810,7 +853,7 @@ function requireAccessToken(req: Request, res: Response, next: NextFunction): vo
   next();
 }
 
-app.use(express.json({ limit: "32kb" }));
+app.use(express.json({ limit: "8mb" }));
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
@@ -839,6 +882,74 @@ app.get("/health", (_req, res) => {
     checks,
     timestamp: new Date().toISOString(),
   });
+});
+
+app.post("/api/agent", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const request = req.body as {
+      jsonrpc?: string;
+      id?: string | number | null;
+      method?: string;
+      params?: { message?: { parts?: Array<{ kind?: string; text?: string }> } };
+    };
+
+    if (request.jsonrpc !== "2.0" || request.method !== "message/send") {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        id: request.id ?? null,
+        error: { code: -32600, message: "Expected an A2A message/send request." },
+      });
+      return;
+    }
+
+    const imageDataUrl = request.params?.message?.parts
+      ?.find((part) => part.kind === "text" && typeof part.text === "string")
+      ?.text;
+    const match = imageDataUrl?.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        id: request.id ?? null,
+        error: { code: -32602, message: "A base64 image data URL is required." },
+      });
+      return;
+    }
+
+    const source = Buffer.from(match[1], "base64");
+    if (!source.length || source.length > 4 * 1024 * 1024) {
+      res.status(413).json({
+        jsonrpc: "2.0",
+        id: request.id ?? null,
+        error: { code: -32602, message: "Image must be between 1 byte and 4 MB." },
+      });
+      return;
+    }
+
+    const grayscale = await sharp(source)
+      .grayscale()
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    const taskId = randomUUID();
+    const contextId = randomUUID();
+
+    res.json({
+      jsonrpc: "2.0",
+      id: request.id ?? null,
+      result: {
+        kind: "task",
+        id: taskId,
+        contextId,
+        status: { state: "completed" },
+        artifacts: [{
+          artifactId: randomUUID(),
+          name: "grayscale.png",
+          parts: [{ kind: "text", text: `data:image/png;base64,${grayscale.toString("base64")}` }],
+        }],
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.get("/api/reputation", async (_req, res) => {
