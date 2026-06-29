@@ -784,6 +784,13 @@ app.use((_req, res, next) => {
 });
 app.use(express.static(resolve(__dir, "public")));
 
+// Vercel ignores express.static() for Express functions. Keep an explicit
+// root handler as a runtime fallback; vercel.json rewrites / to /index.html
+// before the request reaches the function.
+app.get("/", (_req, res) => {
+  res.sendFile(resolve(__dir, "public", "index.html"));
+});
+
 app.get("/health", (_req, res) => {
   const checks = {
     openaiApiKey: Boolean(process.env.OPENAI_API_KEY?.trim()),
