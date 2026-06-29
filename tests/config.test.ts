@@ -81,6 +81,7 @@ test("Vercel exposes explicit backend function entrypoints", () => {
     expect(source).toContain("maxDuration");
   }
   expect(config.rewrites).toContainEqual({ source: "/health", destination: "/api/health" });
+  expect(read("frontend/api/process.ts")).toContain("VERCEL_PROJECT_PRODUCTION_URL");
 });
 
 
