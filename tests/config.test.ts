@@ -58,3 +58,13 @@ test("reputation and validation use separate wallet roles", () => {
   expect(validation).toContain("loadValidatorPrivateKey");
   expect(validation).toContain("args: [validatorAddress as Address");
 });
+
+
+test("Vercel maps the project root to the web UI", () => {
+  const source = read("frontend/server.ts");
+  const config = JSON.parse(read("frontend/vercel.json")) as {
+    rewrites: Array<{ source: string; destination: string }>;
+  };
+  expect(source).toContain('app.get("/",');
+  expect(config.rewrites).toContainEqual({ source: "/", destination: "/index.html" });
+});
