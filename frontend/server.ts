@@ -613,11 +613,16 @@ async function readReputation(agentId: number) {
 }
 
 function embeddedColorizerEndpoint(): string {
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (process.env.VERCEL) {
+    if (!vercelUrl) {
+      throw new Error("VERCEL_URL is missing; cannot resolve the embedded paid Agent 2 endpoint.");
+    }
+    return `https://${vercelUrl}/api/agent`;
+  }
+
   const configured = process.env.COLORIZER_URL?.trim();
   if (configured) return configured.replace(/\/$/, "");
-
-  const vercelUrl = process.env.VERCEL_URL?.trim();
-  if (vercelUrl) return `https://${vercelUrl}/api/agent`;
 
   return `http://127.0.0.1:${process.env.PORT ?? "3001"}/api/agent`;
 }
@@ -674,7 +679,7 @@ async function runPipeline(
     const endpointUnavailable =
       /(?:\b404\b|\b410\b|\b502\b|\b503\b|\b504\b|application not found|fetch failed|econnrefused|enotfound|timed?\s*out)/i.test(message);
 
-    const allowLocalFallback = process.env.ALLOW_LOCAL_COLORIZER_FALLBACK === "true";
+    const allowLocalFallback = !process.env.VERCEL && process.env.ALLOW_LOCAL_COLORIZER_FALLBACK === "true";
     if (!endpointUnavailable || !allowLocalFallback) {
       if (endpointUnavailable) {
         throw new Error(
