@@ -104,6 +104,9 @@ test("embedded Agent 2 enforces a real Base Sepolia x402 payment", () => {
   expect(source).toContain('"https://x402.org/facilitator"');
   expect(source).toContain('.register(X402_NETWORK, new ExactEvmServerScheme())');
   expect(source).toContain("function embeddedColorizerEndpoint");
+  expect(source).toContain("if (process.env.VERCEL)");
+  expect(source.indexOf("const vercelUrl")).toBeLessThan(source.indexOf("const configured"));
+  expect(source).toContain('!process.env.VERCEL && process.env.ALLOW_LOCAL_COLORIZER_FALLBACK === "true"');
   expect(source).toContain("sendToColorizerWeb(imageBase64, colorizerEndpoint, emit)");
   expect(source).toContain("responseTimeMs, endpoint: colorizerEndpoint");
 });
