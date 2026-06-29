@@ -68,3 +68,16 @@ test("Vercel maps the project root to the web UI", () => {
   expect(source).toContain('app.get("/",');
   expect(config.rewrites).toContainEqual({ source: "/", destination: "/index.html" });
 });
+
+
+test("Vercel exposes explicit backend function entrypoints", () => {
+  const config = JSON.parse(read("frontend/vercel.json")) as {
+    rewrites: Array<{ source: string; destination: string }>;
+  };
+  for (const path of ["process", "reputation", "health"]) {
+    const source = read(`frontend/api/${path}.ts`);
+    expect(source).toContain('from "../server.js"');
+    expect(source).toContain("maxDuration");
+  }
+  expect(config.rewrites).toContainEqual({ source: "/health", destination: "/api/health" });
+});

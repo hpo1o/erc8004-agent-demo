@@ -7,5 +7,8 @@
     "skipLibCheck": true,
     "outDir": "dist"
   },
-  "include": ["server.ts"]
+  "include": [
+    "server.ts",
+    "api/**/*.ts"
+  ]
 }
