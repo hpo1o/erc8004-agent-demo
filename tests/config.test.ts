@@ -25,6 +25,7 @@ test("frontend requires a patched Multer major version", () => {
     dependencies: Record<string, string>;
   };
   expect(pkg.dependencies.multer.replace(/^[~^]/, "").startsWith("2.")).toBe(true);
+  expect(pkg.dependencies["@x402/express"]).toBeTruthy();
 });
 
 test("CI workflow and deployment guides are present", () => {
@@ -74,7 +75,7 @@ test("Vercel exposes explicit backend function entrypoints", () => {
   const config = JSON.parse(read("frontend/vercel.json")) as {
     rewrites: Array<{ source: string; destination: string }>;
   };
-  for (const path of ["process", "reputation", "health"]) {
+  for (const path of ["process", "reputation", "health", "agent"]) {
     const source = read(`frontend/api/${path}.ts`);
     expect(source).toContain('from "../server.js"');
     expect(source).toContain("maxDuration");
@@ -90,4 +91,17 @@ test("frontend falls back locally when the registered colorizer is unavailable",
   expect(source).toContain(".grayscale()");
   expect(source).toContain('txHash: "local-fallback"');
   expect(source).toContain("ERC-8004 proof steps skipped for local fallback output");
+});
+
+
+test("embedded Agent 2 enforces a real Base Sepolia x402 payment", () => {
+  const source = read("frontend/server.ts");
+  expect(source).toContain("paymentMiddleware");
+  expect(source).toContain('"POST /api/agent"');
+  expect(source).toContain('price: "$0.01"');
+  expect(source).toContain('"https://x402.org/facilitator"');
+  expect(source).toContain('.register(X402_NETWORK, new ExactEvmServerScheme())');
+  expect(source).toContain("function embeddedColorizerEndpoint");
+  expect(source).toContain("sendToColorizerWeb(imageBase64, colorizerEndpoint, emit)");
+  expect(source).toContain("responseTimeMs, endpoint: colorizerEndpoint");
 });
