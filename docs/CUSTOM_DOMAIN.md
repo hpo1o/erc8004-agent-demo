@@ -57,3 +57,27 @@ frontend does not require an on-chain update.
 If the colorizer endpoint itself moves, update
 `erc8004/registration/colorizer.json`, pin the new registration file to IPFS,
 and call `setAgentURI()` before removing the old endpoint.
+
+
+## Vercel deployment
+
+This repository is a monorepo. In Vercel Project Settings, set **Root
+Directory** to `frontend`. The repository root is not the web application.
+
+The `frontend/vercel.json` file configures the Express function for a
+five-minute maximum duration. Vercel serves `frontend/public/**` as static
+assets and runs `frontend/server.ts` as the backend function.
+
+Add these variables in **Settings → Environment Variables** for both Production
+and Preview, then trigger a redeploy:
+
+- `OPENAI_API_KEY` — required for prompt generation;
+- `OPENAI_IMAGE_MODEL=gpt-image-2`;
+- `PAYER_PRIVATE_KEY` — required if Agent 2 responds with x402 payment;
+- `SERVICE_ACCESS_TOKEN` — recommended for public deployments;
+- `ERC8004_PRIVATE_KEY` and `PINATA_JWT` — optional on-chain proof steps.
+
+Check `/health` after deployment. It returns only safe booleans, never secret
+values. Prompt generation is ready only when `checks.openaiApiKey` is `true`.
+If it is `false`, the variable is missing from the environment used by that
+specific Vercel deployment. Environment changes require a redeploy.
