@@ -27,9 +27,31 @@ test("frontend requires a patched Multer major version", () => {
   expect(pkg.dependencies.multer.replace(/^[~^]/, "").startsWith("2.")).toBe(true);
 });
 
-test("CI workflow and custom-domain guide are present", () => {
+test("CI workflow and deployment guides are present", () => {
   expect(read(".github/workflows/ci.yml")).toContain("bun test tests/");
-  expect(read("docs/CUSTOM_DOMAIN.md")).toContain("SERVICE_ACCESS_TOKEN");
+  const guide = read("docs/CUSTOM_DOMAIN.md");
+  expect(guide).toContain("SERVICE_ACCESS_TOKEN");
+  expect(guide).toContain("Root Directory");
+  expect(guide).toContain("OPENAI_API_KEY");
+});
+
+test("Vercel runtime exports Express and exposes safe readiness checks", () => {
+  const source = read("frontend/server.ts");
+  const config = JSON.parse(read("frontend/vercel.json")) as {
+    functions: Record<string, { maxDuration: number }>;
+  };
+  expect(source).toContain("export const maxDuration = 300");
+  expect(source).toContain("export default app");
+  expect(source).toContain("if (!process.env.VERCEL)");
+  expect(source).toContain("openaiApiKey");
+  expect(source).toContain("PAYER_PRIVATE_KEY is not configured");
+  expect(config.functions["server.ts"].maxDuration).toBe(300);
+});
+
+test("browser reports API response details instead of only an HTTP code", () => {
+  const source = read("frontend/public/app.js");
+  expect(source).toContain('contentType.includes("application/json")');
+  expect(source).toContain("detail ||");
 });
 
 test("reputation and validation use separate wallet roles", () => {
