@@ -81,3 +81,13 @@ test("Vercel exposes explicit backend function entrypoints", () => {
   }
   expect(config.rewrites).toContainEqual({ source: "/health", destination: "/api/health" });
 });
+
+
+test("frontend falls back locally when the registered colorizer is unavailable", () => {
+  const source = read("frontend/server.ts");
+  expect(source).toContain("usedLocalColorizer");
+  expect(source).toContain("Using the local grayscale fallback");
+  expect(source).toContain(".grayscale()");
+  expect(source).toContain('txHash: "local-fallback"');
+  expect(source).toContain("ERC-8004 proof steps skipped for local fallback output");
+});
