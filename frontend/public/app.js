@@ -424,7 +424,15 @@ generateBtn.addEventListener("click", async () => {
     }
 
     if (!response.ok) {
-      throw new Error(`Server error: HTTP ${response.status}`);
+      const contentType = response.headers.get("content-type") ?? "";
+      let detail = "";
+      if (contentType.includes("application/json")) {
+        const body = await response.json().catch(() => ({}));
+        detail = typeof body.error === "string" ? body.error : "";
+      } else {
+        detail = (await response.text().catch(() => "")).trim();
+      }
+      throw new Error(detail || `Server error: HTTP ${response.status}`);
     }
 
     await readSSEStream(response);
