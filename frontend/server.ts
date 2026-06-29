@@ -645,12 +645,45 @@ async function runPipeline(
   // ── Step 3: Send to colorizer-service ───────────────────────────────────
   emit({ type: "step", n: 3, total: TOTAL, label: "Sending to Agent 2 (colorizer)..." });
   const startMs = Date.now();
-  const { grayscaleBase64, txHash, contextId, taskId } = await sendToColorizerWeb(imageBase64, agent.endpoint, emit);
+  let usedLocalColorizer = false;
+  let colorizerResult: Awaited<ReturnType<typeof sendToColorizerWeb>>;
+
+  try {
+    colorizerResult = await sendToColorizerWeb(imageBase64, agent.endpoint, emit);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const endpointUnavailable =
+      /(?:\b404\b|\b410\b|\b502\b|\b503\b|\b504\b|application not found|fetch failed|econnrefused|enotfound|timed?\s*out)/i.test(message);
+
+    if (!endpointUnavailable) throw err;
+
+    usedLocalColorizer = true;
+    emit({
+      type: "log",
+      message: `⚠ Agent 2 unavailable (${message}). Using the local grayscale fallback.`,
+    });
+
+    const grayscaleBuffer = await sharp(Buffer.from(imageBase64, "base64"))
+      .grayscale()
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+
+    colorizerResult = {
+      grayscaleBase64: grayscaleBuffer.toString("base64"),
+      txHash: "local-fallback",
+      contextId: `local-${randomUUID()}`,
+      taskId: `local-${randomUUID()}`,
+    };
+  }
+
+  const { grayscaleBase64, txHash, contextId, taskId } = colorizerResult;
   const responseTimeMs = Date.now() - startMs;
   paymentTxHash = txHash;
 
   emit({ type: "log", message: `✓ Grayscale received (${responseTimeMs}ms)` });
-  if (!txHash.startsWith("MOCK_TX") && txHash !== "pending" && txHash !== "no-payment-required") {
+  if (usedLocalColorizer) {
+    emit({ type: "log", message: "⚠ x402 payment skipped because the local fallback was used" });
+  } else if (!txHash.startsWith("MOCK_TX") && txHash !== "pending" && txHash !== "no-payment-required") {
     emit({ type: "log", message: `✓ Payment txHash: ${txHash}` });
   } else if (txHash.startsWith("MOCK_TX")) {
     emit({ type: "log", message: `⚠ Payment: MOCK (not a real transaction)` });
@@ -659,7 +692,9 @@ async function runPipeline(
 
   // ── Steps 4–5: ERC-8004 (best-effort, requires PINATA_JWT + ERC8004_PRIVATE_KEY) ──
   const payerKey = process.env.PAYER_PRIVATE_KEY ?? "";
-  if (!payerKey) {
+  if (usedLocalColorizer) {
+    emit({ type: "log", message: "⚠ ERC-8004 proof steps skipped for local fallback output" });
+  } else if (!payerKey) {
     emit({ type: "log", message: "⚠ PAYER_PRIVATE_KEY not set — skipping ERC-8004 steps" });
   } else {
     const payerAccount = privateKeyToAccount((payerKey.startsWith("0x") ? payerKey : `0x${payerKey}`) as `0x${string}`);
