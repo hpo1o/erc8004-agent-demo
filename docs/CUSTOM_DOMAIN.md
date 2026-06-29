@@ -64,9 +64,10 @@ and call `setAgentURI()` before removing the old endpoint.
 This repository is a monorepo. In Vercel Project Settings, set **Root
 Directory** to `frontend`. The repository root is not the web application.
 
-The `frontend/vercel.json` file configures the Express function for a
-five-minute maximum duration. Vercel serves `frontend/public/**` as static
-assets and runs `frontend/server.ts` as the backend function.
+Vercel detects the default Express export in `frontend/server.ts`
+automatically, serves `frontend/public/**` through its CDN, and runs the
+backend with Fluid Compute. No Vercel build command or output directory is
+needed.
 
 Add these variables in **Settings → Environment Variables** for both Production
 and Preview, then trigger a redeploy:
