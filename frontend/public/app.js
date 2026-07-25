@@ -107,11 +107,11 @@ removeFileBtn.addEventListener("click", e => {
   clearUploadedFile();
 });
 
-dropzone.addEventListener("click", e => {
-  if (!e.target.closest(".remove-file")) fileInput.click();
+dropzone.addEventListener("click", event => {
+  if (!event.target.closest("label, input, button")) fileInput.click();
 });
 dropzone.addEventListener("keydown", event => {
-  if (event.key !== "Enter" && event.key !== " ") return;
+  if (event.target !== dropzone || (event.key !== "Enter" && event.key !== " ")) return;
   event.preventDefault();
   fileInput.click();
 });
