@@ -1,333 +1,264 @@
-# ERC-8004 + x402 Reference Implementation
+# ERC-8004 + x402 Agent Demo
 
-![CI](https://github.com/hpo1o/erc8004-agent-demo/actions/workflows/ci.yml/badge.svg)
-![Network](https://img.shields.io/badge/network-Base%20Sepolia-blue)
-![ERC-8004](https://img.shields.io/badge/ERC--8004-Identity%20%2B%20Validation-orange)
-![x402](https://img.shields.io/badge/x402-real%20USDC-green)
+[![CI](https://github.com/hpo1o/erc8004-agent-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/hpo1o/erc8004-agent-demo/actions/workflows/ci.yml)
+![Network](https://img.shields.io/badge/network-Base%20Sepolia-2563eb)
+![ERC-8004](https://img.shields.io/badge/ERC--8004-identity%20%7C%20reputation%20%7C%20validation-f59e0b)
+![x402](https://img.shields.io/badge/x402-USDC%20payments-10b981)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6)
 
-Эталонная реализация полного стека **ERC-8004 (Agent Identity) + A2A (Agent2Agent) + x402 (HTTP Payments)** на двух AI-агентах. Два агента взаимодействуют через открытые протоколы: Agent 1 находит Agent 2 через блокчейн, платит криптовалютой, получает результат — без заранее известных URL и без доверия к третьей стороне.
+A production-style reference implementation of two autonomous agents interacting through open protocols. Agent 1 discovers Agent 2 through the ERC-8004 Identity Registry, negotiates and signs a USDC payment through x402, receives an A2A result, and records reputation and validation evidence on Base Sepolia.
 
-**Публичный агент (Agent 2):** https://erc8004-agent-demo-production.up.railway.app
+[Live demo](https://erc8004-agent-demo.vercel.app) · [Agent #2214](https://sepolia.basescan.org/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/2214) · [ERC-8004 contracts](https://github.com/erc-8004/erc-8004-contracts)
 
----
+> This project uses testnet assets only. The $0.01 payment is real Base Sepolia USDC, but it has no mainnet value.
 
-## Архитектура
+## What this project demonstrates
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Image Generator — Agent 1 (CLI)                                    │
-│                                                                     │
-│  npm start "a golden retriever"                                     │
-│         │                                                           │
-│  [1/5]  GPT Image 2 → imageBase64 (768×768 PNG)                        │
-│         │                                                           │
-│  [2/5]  ERC-8004 Discovery ─────────────────────────────────────┐   │
-│         │  publicClient.readContract(tokenURI(2214))             │   │
-│         │  → ipfs://bafkreih6km34e3itewqpt3djsevqesxa2sf...      │   │
-│         │  fetch(CID) → registration file                         │   │
-│         │  services[name=A2A].endpoint → Railway URL              │   │
-│         │◄────────────────────────────────────────────────────────┘   │
-│         │                                                           │
-│  [2/5]  A2A message/send ──────────────────────────────────────┐   │
-│         │  POST /agent  →  HTTP 402 (payment required)          │   │
-│         │  parse PAYMENT-REQUIRED header                      │   │
-│         │  sign EIP-3009 transferWithAuthorization (off-chain)   │   │
-│         │  retry POST /agent with PAYMENT-SIGNATURE header              │   │
-│         │                                                        │   │
-│         │         ┌──────────────────────────────────────────┐   │   │
-│         │         │  Colorizer Service — Agent 2 (Railway)   │   │   │
-│         └────────►│  x402 middleware: verify + settle USDC   │   │   │
-│                   │  sharp().grayscale().png() (no LLM)       │   │   │
-│                   │  → grayscaleBase64                         │   │   │
-│                   └──────────────────┬───────────────────────┘   │   │
-│         ◄────────────────────────────┘                            │   │
-│  [3/5]  output.jpg saved                                          │   │
-│         │                                                         │   │
-│  [4/5]  ERC-8004 Reputation Registry                              │   │
-│         │  giveFeedback(agentId=2214, value=100, "successRate")   │   │
-│         │  off-chain JSON (contextId + paymentTxHash) → IPFS      │   │
-│         │  feedbackHash stored on-chain                           │   │
-│         │                                                         │   │
-│  [5/5]  ERC-8004 Validation Registry                              │   │
-│         │  requestValidation(agentId=2214,                        │   │
-│         │    inputHash=keccak256(imageBase64),                    │   │
-│         │    outputHash=keccak256(grayscaleBase64))               │   │
-│         │  immutable audit trail on-chain                        │   │
-└─────────────────────────────────────────────────────────────────────┘
-```
+- On-chain agent identity and endpoint discovery through ERC-8004.
+- Agent-to-agent JSON-RPC messaging using A2A \`message/send\`.
+- HTTP-native payment negotiation using x402 v2 and EIP-3009 authorization.
+- Real testnet USDC settlement on Base Sepolia.
+- ERC-8004 reputation feedback linked to A2A and payment evidence on IPFS.
+- ERC-8004 validation requests and responses tied to input/output hashes.
+- A browser demo, a CLI client, a standalone paid agent service, and automated tests.
+- Deployment hardening for Vercel and Railway, including health checks, access control, rate limiting, and secret-safe readiness reporting.
 
----
+## End-to-end flow
 
-## Зарегистрированные агенты (Base Sepolia)
+\`\`\`mermaid
+sequenceDiagram
+    participant U as User
+    participant A1 as Agent 1
+    participant ID as ERC-8004 Identity Registry
+    participant A2 as Agent 2
+    participant F as x402 Facilitator
+    participant R as Reputation Registry
+    participant V as Validation Registry
+
+    U->>A1: Prompt or image
+    A1->>ID: tokenURI(agentId 2214)
+    ID-->>A1: IPFS registration URI
+    A1->>A2: A2A message/send
+    A2-->>A1: HTTP 402 + payment requirements
+    A1->>A1: Sign EIP-3009 authorization
+    A1->>A2: Retry with PAYMENT-SIGNATURE
+    A2->>F: Verify and settle payment
+    F-->>A2: Settlement result
+    A2-->>A1: Grayscale image + A2A task
+    A1->>R: Record reputation feedback
+    A1->>V: Record validation evidence
+    A1-->>U: Images, transaction hashes, and proof links
+\`\`\`
+
+The hosted web application uses an embedded, same-origin Agent 2 endpoint for deployment resilience. The CLI path can perform canonical on-chain discovery and call the endpoint stored in the agent registration file.
+
+## Components
+
+| Component | Role | Key technologies |
+| --- | --- | --- |
+| \`frontend/\` | Interactive portfolio demo and server-side orchestration | Express, SSE, OpenAI Images, viem, sharp |
+| \`image-generator/\` | Agent 1 CLI | TypeScript, A2A, x402 client, GPT Image 2 |
+| \`colorizer-service/\` | Standalone Agent 2 | A2A, MCP, x402 middleware, sharp |
+| \`erc8004/\` | Identity, discovery, reputation, and validation tooling | viem, IPFS/Pinata, Base Sepolia |
+| \`tests/\` | Protocol, schema, security, and deployment regressions | Bun test |
+
+## Registered agents
 
 ### Agent 2 — Colorizer Service
 
-| Поле | Значение |
-|---|---|
-| agentId | **2214** |
-| identifier | `eip155:84532:0x8004A818BFB912233c491871b3d84c89A494BD9e/2214` |
-| A2A endpoint | `https://erc8004-agent-demo-production.up.railway.app/agent` |
-| MCP endpoint | `wss://erc8004-agent-demo-production.up.railway.app/mcp` |
-| registration file | [ipfs://bafkreih6km34e3itewqpt3djsevqesxa2sfuqwtlvs3c6qj5mafxk3oeya](https://gateway.pinata.cloud/ipfs/bafkreih6km34e3itewqpt3djsevqesxa2sfuqwtlvs3c6qj5mafxk3oeya) |
-| NFT | [basescan](https://sepolia.basescan.org/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/2214) |
+| Field | Value |
+| --- | --- |
+| Agent ID | \`2214\` |
+| Identifier | \`eip155:84532:0x8004A818BFB912233c491871b3d84c89A494BD9e/2214\` |
+| Registration file | [IPFS](https://gateway.pinata.cloud/ipfs/bafkreih6km34e3itewqpt3djsevqesxa2sfuqwtlvs3c6qj5mafxk3oeya) |
+| NFT | [BaseScan](https://sepolia.basescan.org/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/2214) |
+| Capability | Convert JPEG, PNG, WebP, or AVIF input to grayscale PNG |
+| Price | $0.01 USDC on Base Sepolia |
 
 ### Agent 1 — Image Generator
 
-| Поле | Значение |
-|---|---|
-| agentId | **2215** |
-| identifier | `eip155:84532:0x8004A818BFB912233c491871b3d84c89A494BD9e/2215` |
-| registration file | [ipfs://bafkreidvz2xz3aiudzmcxw4k4vh3crxotzmteq2m3vs7zykhyxndvt7j34](https://gateway.pinata.cloud/ipfs/bafkreidvz2xz3aiudzmcxw4k4vh3crxotzmteq2m3vs7zykhyxndvt7j34) |
+| Field | Value |
+| --- | --- |
+| Agent ID | \`2215\` |
+| Identifier | \`eip155:84532:0x8004A818BFB912233c491871b3d84c89A494BD9e/2215\` |
+| Registration file | [IPFS](https://gateway.pinata.cloud/ipfs/bafkreidvz2xz3aiudzmcxw4k4vh3crxotzmteq2m3vs7zykhyxndvt7j34) |
+| Capability | Generate an image, purchase processing, and submit proof records |
 
-### ERC-8004 Контракты (Base Sepolia, chainId 84532)
+## ERC-8004 contracts
 
-| Registry | Адрес | Explorer |
-|---|---|---|
-| Identity | `0x8004A818BFB912233c491871b3d84c89A494BD9e` | [basescan](https://sepolia.basescan.org/address/0x8004A818BFB912233c491871b3d84c89A494BD9e) |
-| Reputation | `0x8004B663056A597Dffe9eCcC1965A193B7388713` | [basescan](https://sepolia.basescan.org/address/0x8004B663056A597Dffe9eCcC1965A193B7388713) |
-| Validation | `0x8004Cb1BF31DAf7788923b405b754f57acEB4272` | [basescan](https://sepolia.basescan.org/address/0x8004Cb1BF31DAf7788923b405b754f57acEB4272) |
+All contracts are deployed on Base Sepolia (\`chainId 84532\`).
 
-Адреса детерминированы через CREATE2 — одинаковы на всех EVM-сетях.
+| Registry | Address |
+| --- | --- |
+| Identity | [\`0x8004A818BFB912233c491871b3d84c89A494BD9e\`](https://sepolia.basescan.org/address/0x8004A818BFB912233c491871b3d84c89A494BD9e) |
+| Reputation | [\`0x8004B663056A597Dffe9eCcC1965A193B7388713\`](https://sepolia.basescan.org/address/0x8004B663056A597Dffe9eCcC1965A193B7388713) |
+| Validation | [\`0x8004Cb1BF31DAf7788923b405b754f57acEB4272\`](https://sepolia.basescan.org/address/0x8004Cb1BF31DAf7788923b405b754f57acEB4272) |
 
----
+The deterministic CREATE2 deployment uses the same registry addresses across supported EVM networks.
 
-## Quickstart
+## Quick start
 
-### 1. Клонировать и установить зависимости
+### Prerequisites
 
-```bash
-git clone <repo>
-cd erc8004-agent-demo
-npm run install:all
-```
+- Node.js 20 or newer.
+- Bun 1.3.11 or newer for the test suite.
+- An OpenAI API key with image-generation access.
+- A Base Sepolia payer wallet funded with testnet ETH and USDC.
+- A separate Agent 2 owner wallet if you want reputation and validation writes.
+- A Pinata JWT if you want to publish evidence to IPFS.
 
-### 2. Настроить .env
+### Install
 
-```bash
-cp image-generator/.env.example  image-generator/.env
-cp erc8004/.env.example          erc8004/.env
-```
+    git clone https://github.com/hpo1o/erc8004-agent-demo.git
+    cd erc8004-agent-demo
+    npm run install:all
 
-Обязательно заполнить в `image-generator/.env`:
+### Configure the CLI
 
-| Переменная | Где получить |
-|---|---|
-| `OPENAI_API_KEY` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| `PAYER_PRIVATE_KEY` | MetaMask → Account Details → Show private key |
-| `COLORIZER_URL` | **оставить пустым** — автоматический ERC-8004 discovery |
+Copy the example files:
 
-> `COLORIZER_URL=` (пустая строка) означает что Image Generator найдёт Agent 2 через блокчейн автоматически: читает `tokenURI(2214)` on-chain → fetch IPFS → берёт `services[A2A].endpoint`.
-> Заполнить только для локальной разработки: `COLORIZER_URL=http://localhost:3000/agent`
+    cp image-generator/.env.example image-generator/.env
+    cp erc8004/.env.example erc8004/.env
 
-Для `PAYER_PRIVATE_KEY` нужны средства на Base Sepolia:
-- ETH (газ): [alchemy.com/faucets/base-sepolia](https://www.alchemy.com/faucets/base-sepolia)
-- USDC: [faucet.circle.com](https://faucet.circle.com) → выбрать Base Sepolia
+At minimum, set these values in \`image-generator/.env\`:
 
-### 3. Запустить демо
+| Variable | Purpose |
+| --- | --- |
+| \`OPENAI_API_KEY\` | Generates the source image with GPT Image 2 |
+| \`PAYER_PRIVATE_KEY\` | Signs x402 USDC authorization and Agent 1 registry writes |
+| \`BASE_SEPOLIA_RPC\` | Optional custom RPC; defaults to the public Base endpoint |
+| \`COLORIZER_URL\` | Optional endpoint override; leave empty for ERC-8004 discovery |
+| \`PAYMENT_RECIPIENT_ADDRESS\` | Required with a manual \`COLORIZER_URL\` override |
 
-```bash
-cd image-generator
-npm start "a golden retriever in a sunlit meadow"
-```
+For a deterministic hosted call, set:
 
-Ожидаемый вывод:
+    COLORIZER_URL=https://erc8004-agent-demo.vercel.app/api/agent
+    PAYMENT_RECIPIENT_ADDRESS=0x171c4E80E4cA6bBe95Eb38D9d226b52897350dBb
 
-```
-=== image-generator ===
-Prompt: "a golden retriever in a sunlit meadow"
+Leave \`COLORIZER_URL\` empty when you specifically want to demonstrate on-chain endpoint discovery.
 
-Discovering Agent 2 via ERC-8004 registry...
-  ✓ Discovered: https://erc8004-agent-demo-production.up.railway.app/agent (agentId: 2214)
+### Run the CLI demo
 
-[1/5] Generating image with GPT Image 2...
-  ✓ Image generated (≈38 KB as base64)
+    cd image-generator
+    npm start "a golden retriever in a sunlit meadow"
 
-[2/5] Sending to colorizer-service (Agent 2)...
-  → POST https://erc8004-agent-demo-production.up.railway.app/agent
+The CLI writes the final image to \`image-generator/output.jpg\` and prints payment, reputation, and validation references.
 
-Агент 2 запрашивает оплату $0.01 USDC на Base Sepolia. Подтвердить? (y/n) > y
-  → Подписываю платёж (EIP-3009)...
-  → Повторный запрос с PAYMENT-SIGNATURE заголовком...
-  ✓ Grayscale image received
+## Run the web application locally
 
-[3/5] Saving output.jpg...
-[4/5] Recording ERC-8004 reputation feedback...
-  ✓ Feedback recorded  feedbackIndex: 0
-[5/5] Submitting ERC-8004 validation request...
-  ✓ Validation recorded on-chain
+Copy \`frontend/.env.example\` to \`frontend/.env\`, provide the required values, and run:
 
-=== Done ===
-✓ Saved to: output.jpg
-✓ Payment txHash: 0x...
-```
+    npm start --prefix frontend
 
----
-
-## Wallet Setup
-
-### Зачем нужны два разных кошелька
-
-В этом проекте два кошелька играют разные роли:
-
-- **`PAYER_PRIVATE_KEY`** (`image-generator/.env`) — кошелёк **Agent 1**. Платит $0.01 USDC, подписывает `giveFeedback()` и выступает независимым валидатором.
-- **`ERC8004_PRIVATE_KEY`** (`erc8004/.env`) — кошелёк **Agent 2**. Владеет NFT агента (agentId 2214) и создаёт validation request.
-
-**ERC-8004 Reputation Registry запрещает self-feedback**: контракт отклоняет `giveFeedback()` если `msg.sender == agentOwner`. Если оба ключа одинаковые — Agent 1 является владельцем Agent 2, и шаг репутации будет пропущен с сообщением `⚠ Reputation feedback skipped`.
-
-`output.jpg` при этом сохранится — основной флоу работает независимо от репутации.
-
-### Проверка конфликта кошельков
-
-```bash
-cd erc8004
-npm run check
-```
-
-При совпадении ключей:
-```
-⚠  WALLET CONFLICT DETECTED
-   PAYER_PRIVATE_KEY and ERC8004_PRIVATE_KEY are the same wallet.
-   Reputation Registry will be SKIPPED (ERC-8004 forbids self-feedback).
-   ...
-```
-
-### Создание второго кошелька (MetaMask)
-
-1. MetaMask → иконка аккаунта → **Add account or hardware wallet**
-2. **Add a new account** → дать имя "Agent 2 ERC8004"
-3. **Account Details** → **Show private key** → скопировать ключ
-4. Записать новый адрес, получить тестовый ETH:
-   - [alchemy.com/faucets/base-sepolia](https://www.alchemy.com/faucets/base-sepolia) — 0.1 ETH/день
-   - [app.optimism.io/faucet](https://app.optimism.io/faucet) — Superchain faucet
-5. Записать в `erc8004/.env`: `ERC8004_PRIVATE_KEY=0x<ключ_нового_кошелька>`
-
----
-
-## ERC-8004 компоненты
-
-### Identity Registry — что реально работает
-
-- `register(agentURI)` минтит ERC-721 NFT → агент получает глобальный идентификатор `eip155:84532:<registry>/<tokenId>`
-- `setAgentURI(agentId, newURI)` обновляет указатель на registration file
-- `tokenURI(agentId)` возвращает текущий IPFS URI — **единственный источник истины** для discovery
-- Image Generator при каждом запуске читает `tokenURI(2214)` on-chain → никаких захардкоженных URL
-
-### Reputation Registry — честное описание
-
-- `giveFeedback(agentId, value, decimals, tag1, tag2, feedbackURI, feedbackHash)` пишет on-chain
-- `feedbackURI` указывает на JSON файл на IPFS с `a2a.contextId`, `a2a.taskId`, `proofOfPayment.txHash`
-- `feedbackHash = keccak256(JSON)` — верификация off-chain данных через on-chain хеш
-- **Требует разных кошельков** (self-feedback запрещён контрактом)
-- `getSummary(agentId, [clientAddresses], tag)` агрегирует данные на цепи — любой клиент может проверить репутацию перед оплатой
-
-### Validation Registry — честное описание
-
-| Операция | Статус | Условие |
-|---|---|---|
-| Validation Request | ✅ on-chain | Всегда выполняется если agentId зарегистрирован |
-| Validation Response | ✅ on-chain | Agent 1 (payer) выступает независимым валидатором |
-
-- `requestValidation(validatorAddress, agentId, requestURI, requestHash)` создаёт immutable запись
-- Agent 2 owner создаёт запрос и указывает адрес Agent 1 payer как `validatorAddress`.
-- Agent 1 подписывает `validationResponse()` своим `PAYER_PRIVATE_KEY`.
-- Для более сильной гарантии payer можно заменить отдельным zkML/TEE/stake-secured валидатором.
-- **Это воспроизводимая аттестация, а не доказательство вычисления** — вход и выход связаны on-chain хешами. Реальная верификация: zkML prover, TEE oracle, или stake-secured re-execution агрегатором
-
----
-
-## Структура проекта
-
-```
-erc8004-agent-demo/
-│
-├── colorizer-service/          Agent 2 — HTTP-сервер (Railway)
-│   ├── app/
-│   │   ├── agent.ts            Детерминированный обработчик (без LLM)
-│   │   ├── server.ts           AixyzApp: A2APlugin + MCPPlugin + x402
-│   │   ├── mock-facilitator.ts Мок x402 для локальной разработки
-│   │   └── tools/colorize.ts   sharp().grayscale() + MCP tool wrapper
-│   └── aixyz.config.ts         Метаданные агента + x402 config
-│
-├── image-generator/            Agent 1 — CLI-клиент
-│   └── src/
-│       ├── index.ts            5 шагов: Discovery → DALL-E → A2A → Reputation → Validation
-│       ├── dalle.ts            GPT Image 2 768×768 base64
-│       └── colorizer-client.ts A2A + x402 платёжный флоу
-│
-├── erc8004/                    ERC-8004 стек
-│   ├── contracts/
-│   │   └── registry-addresses.json   Адреса трёх реестров
-│   ├── registration/
-│   │   ├── colorizer.json            ERC-8004 registration file (Agent 2)
-│   │   └── image-generator.json      ERC-8004 registration file (Agent 1)
-│   └── scripts/
-│       ├── register.ts         On-chain регистрация (mint NFT + upload IPFS)
-│       ├── discovery.ts        tokenURI → IPFS → A2A endpoint
-│       ├── reputation.ts       submitFeedback() с off-chain JSON на IPFS
-│       ├── validation.ts       requestValidation() с хешами артефактов
-│       ├── check.ts            Pre-flight: env, балансы, wallet conflict
-│       └── read-reputation.ts  CLI: чтение репутации агента
-│
-└── tests/                      Автотесты (bun test)
-    ├── colorize.test.ts         Unit тест executeColorize()
-    ├── registration.test.ts     ERC-8004 schema валидация
-    ├── x402-flow.test.ts        x402 HTTP флоу без блокчейна
-    └── config.test.ts           Регрессии моделей, заголовков и безопасных зависимостей
-```
-
----
-
-## Полезные команды
-
-```bash
-# Pre-flight проверка (env, балансы, wallet conflict)
-cd erc8004 && npm run check
-
-# Зарегистрировать агентов on-chain (mint NFT + upload IPFS)
-cd erc8004 && npm run register
-
-# Проверить discovery
-cd erc8004 && npm run discover
-
-# Прочитать репутацию
-cd erc8004 && npm run reputation -- --agentId 2214 --client 0xYourAddress
-
-# Запустить тесты
-bun test tests/
-
-# Запустить Agent 2 локально
-cd colorizer-service && npx aixyz dev
-
-# Запустить демо
-cd image-generator && npm start "a cat on a rooftop at sunset"
-```
-
----
-
-## Proof of Deployment
-
-Последняя регистрация (ERC-8004 schema v1 с `name`/`endpoint`):
-
-| Агент | Операция | Транзакция |
-|---|---|---|
-| Colorizer (2214) | register() | [0x1bd0e71...](https://sepolia.basescan.org/tx/0x1bd0e710e571e05a0b297ca9b7d48062b2da281deac64a18c9fb60d5fa8103d0) |
-| Colorizer (2214) | setAgentURI() | [0x67e6bdb...](https://sepolia.basescan.org/tx/0x67e6bdbf6427b62e2b1484ab813729bc11d0048f64bb29fa904d5dcd73a16077) |
-| Image Generator (2215) | register() | [0xce6a457...](https://sepolia.basescan.org/tx/0xce6a457ba9f6cb11d6e424afca4ba8e5f3d703f7d170a5f78e95211688f3c91c) |
-| Image Generator (2215) | setAgentURI() | [0x9a816ba...](https://sepolia.basescan.org/tx/0x9a816ba4dc40d25b6dc375efb86a9957f5d8a70350c9210a789ec4ce6bc6aae5) |
-
-Исходный код контрактов: [github.com/erc-8004/erc-8004-contracts](https://github.com/erc-8004/erc-8004-contracts)
-
-
----
-
-## Web frontend и собственный домен
-
-Рабочий сайт находится в `frontend/`. Для публичного развёртывания:
-
-1. Создайте Railway service с Root Directory = `/frontend`.
-2. Добавьте переменные из `frontend/.env.example`.
-3. Обязательно задайте `SERVICE_ACCESS_TOKEN`, чтобы посторонние не расходовали OpenAI credits и тестовый USDC.
-4. Healthcheck: `/health`.
-5. Подключите домен в Railway → Settings → Networking → Custom Domain и добавьте выданную CNAME-запись у DNS-провайдера.
-
-Подробности: [CUSTOM_DOMAIN.md](docs/CUSTOM_DOMAIN.md).
+Open [http://localhost:3001](http://localhost:3001). You can generate an image from a prompt or upload an existing image.
+
+The upload path does not call OpenAI, but the paid Agent 2 request still requires \`PAYER_PRIVATE_KEY\`. Optional on-chain proof steps require \`ERC8004_PRIVATE_KEY\` and \`PINATA_JWT\`.
+
+## Environment variables
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| \`OPENAI_API_KEY\` | Prompt mode | OpenAI API key with image-generation access |
+| \`OPENAI_IMAGE_MODEL\` | No | Defaults to \`gpt-image-2\` |
+| \`PAYER_PRIVATE_KEY\` | Paid flow | Agent 1 payer and validator key |
+| \`ERC8004_PRIVATE_KEY\` | Proof writes | Agent 2 owner key |
+| \`PINATA_JWT\` | Proof writes | Publishes reputation and validation evidence to IPFS |
+| \`BASE_SEPOLIA_RPC\` | No | Custom Base Sepolia RPC URL |
+| \`PAYMENT_RECIPIENT_ADDRESS\` | No | Agent 2 payment recipient; defaults to the registered wallet |
+| \`X402_FACILITATOR_URL\` | No | Defaults to the public x402 facilitator |
+| \`SERVICE_ACCESS_TOKEN\` | Recommended | Protects the expensive \`POST /api/process\` route |
+| \`PROCESS_RATE_LIMIT_MAX\` | No | Per-IP request limit; defaults to 10 |
+| \`PROCESS_RATE_LIMIT_WINDOW_MS\` | No | Rate-limit window; defaults to one hour |
+| \`ALLOW_LOCAL_COLORIZER_FALLBACK\` | Development only | Enables a no-payment local fallback outside Vercel |
+
+Never commit a populated \`.env\` file or use a wallet that controls production funds.
+
+## Useful commands
+
+| Command | Description |
+| --- | --- |
+| \`npm run install:all\` | Install dependencies for every package |
+| \`npm run typecheck\` | Type-check all TypeScript packages |
+| \`npm test\` | Run the complete Bun test suite |
+| \`npm run ci\` | Run type-checking and tests |
+| \`npm run check --prefix erc8004\` | Validate environment, balances, and wallet separation |
+| \`npm run discover --prefix erc8004\` | Resolve Agent 2 through the Identity Registry |
+| \`npm run reputation --prefix erc8004 -- --agentId 2214\` | Read on-chain reputation |
+| \`npm start --prefix frontend\` | Start the portfolio web application |
+| \`npm start --prefix image-generator -- "a cat at sunset"\` | Run Agent 1 from the CLI |
+
+## Deployment
+
+### Vercel
+
+The recommended Vercel project setting is:
+
+- Root Directory: \`frontend\`
+- Framework Preset: Other
+- Build Command: none
+- Output Directory: none
+
+Add the production environment variables, redeploy, and verify:
+
+    https://<your-domain>/health
+
+The health route reports only readiness booleans and never returns secret values.
+
+A root-level \`vercel.json\` and compatibility entrypoints under \`api/\` are also included. They make existing Vercel projects work even when their Root Directory is left at the repository root.
+
+### Railway
+
+The standalone web service can also be deployed from \`frontend/\` with:
+
+- Config file: \`frontend/railway.json\`
+- Dockerfile: \`frontend/Dockerfile\`
+- Health check: \`/health\`
+
+See [docs/CUSTOM_DOMAIN.md](docs/CUSTOM_DOMAIN.md) for custom-domain and DNS guidance.
+
+## Verification and proof
+
+The repository includes immutable deployment evidence for the registered agents:
+
+| Agent | Operation | Transaction |
+| --- | --- | --- |
+| Colorizer #2214 | \`register()\` | [BaseScan](https://sepolia.basescan.org/tx/0x1bd0e710e571e05a0b297ca9b7d48062b2da281deac64a18c9fb60d5fa8103d0) |
+| Colorizer #2214 | \`setAgentURI()\` | [BaseScan](https://sepolia.basescan.org/tx/0x67e6bdbf6427b62e2b1484ab813729bc11d0048f64bb29fa904d5dcd73a16077) |
+| Image Generator #2215 | \`register()\` | [BaseScan](https://sepolia.basescan.org/tx/0xce6a457ba9f6cb11d6e424afca4ba8e5f3d703f7d170a5f78e95211688f3c91c) |
+| Image Generator #2215 | \`setAgentURI()\` | [BaseScan](https://sepolia.basescan.org/tx/0x9a816ba4dc40d25b6dc375efb86a9957f5d8a70350c9210a789ec4ce6bc6aae5) |
+
+## Trust model and limitations
+
+This project deliberately separates what is verifiable from what is illustrative:
+
+- Identity, payment settlement, reputation writes, and validation records are on-chain.
+- A2A payloads and detailed evidence are off-chain; their hashes and IPFS references can be anchored on-chain.
+- The current validation response is signed by the payer. It is a reproducible attestation, not a zero-knowledge proof of computation.
+- The image transformation itself is deterministic \`sharp().grayscale()\`, which makes independent re-execution straightforward.
+- The public demo is testnet software, not an audited payment product.
+- ERC-8004 forbids self-feedback. \`PAYER_PRIVATE_KEY\` and \`ERC8004_PRIVATE_KEY\` must represent different wallets.
+- The registration file endpoint is owner-updatable through \`setAgentURI()\`; clients should always read \`tokenURI()\` instead of treating a cached URL as authoritative.
+
+A production deployment could replace payer validation with zkML, a TEE oracle, or a stake-secured independent validator.
+
+## Project structure
+
+    erc8004-agent-demo/
+    ├── api/                    Root-level Vercel compatibility functions
+    ├── colorizer-service/      Standalone paid Agent 2
+    ├── erc8004/                Registry ABIs, metadata, and on-chain scripts
+    ├── frontend/               Portfolio web application and embedded Agent 2
+    ├── image-generator/        Agent 1 CLI
+    ├── tests/                  Unit, protocol, schema, and deployment tests
+    ├── vercel.json             Root-level monorepo deployment compatibility
+    └── README.md
+
+## Security notes
+
+- \`SERVICE_ACCESS_TOKEN\` protects server-side OpenAI credits and testnet funds.
+- Private keys and API keys remain server-side and are never returned by \`/health\`.
+- The process route has file-size limits, prompt validation, per-IP rate limiting, and security headers.
+- Production success is not reported when x402 settlement fails.
+- The local grayscale fallback is disabled on Vercel and must be explicitly enabled during development.
+
+Contributions and protocol-focused review are welcome through GitHub issues and pull requests.
