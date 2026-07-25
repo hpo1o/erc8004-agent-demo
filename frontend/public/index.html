@@ -9,8 +9,9 @@
   <meta property="og:type" content="website" />
   <meta property="og:title" content="ERC-8004 + x402 Agent Demo" />
   <meta property="og:description" content="Watch one AI agent discover, pay, and verify another agent through open protocols." />
-  <meta property="og:url" content="https://erc8004-agent-demo.vercel.app/" />
-  <link rel="canonical" href="https://erc8004-agent-demo.vercel.app/" />
+  <meta property="og:url" content="https://erc8004-agent-demo-five.vercel.app/" />
+  <link rel="canonical" href="https://erc8004-agent-demo-five.vercel.app/" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -36,28 +37,28 @@
           <span class="badge badge-green">CI verified</span>
           <span class="badge badge-blue">Base Sepolia</span>
           <span class="badge badge-orange">ERC-8004</span>
-          <span class="badge badge-green">Real USDC</span>
+          <span class="badge badge-green">Testnet USDC</span>
         </div>
       </div>
       <p class="header-desc">
         Agent 1 discovers Agent 2 on-chain via ERC-8004, pays $0.01 USDC via x402,
-        and receives a grayscale-converted image with a verifiable testnet payment and on-chain audit trail.
+        and receives a grayscale-converted image with a verifiable payment, reputation record, and validation trail.
       </p>
     </header>
 
     <!-- ── Input card ───────────────────────────────────────────── -->
     <section class="card input-card">
       <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="prompt" role="tab" aria-selected="true">
+        <button class="tab active" id="tab-prompt" data-tab="prompt" role="tab" aria-selected="true" aria-controls="panel-prompt" tabindex="0">
           <span class="tab-icon">✦</span> Text Prompt
         </button>
-        <button class="tab" data-tab="upload" role="tab" aria-selected="false">
+        <button class="tab" id="tab-upload" data-tab="upload" role="tab" aria-selected="false" aria-controls="panel-upload" tabindex="-1">
           <span class="tab-icon">↑</span> Upload Image
         </button>
       </div>
 
       <!-- Text prompt panel -->
-      <div class="tab-panel active" id="panel-prompt">
+      <div class="tab-panel active" id="panel-prompt" role="tabpanel" aria-labelledby="tab-prompt">
         <textarea
           id="prompt-input"
           class="prompt-input"
@@ -74,8 +75,8 @@
       </div>
 
       <!-- Upload panel -->
-      <div class="tab-panel" id="panel-upload">
-        <div class="dropzone" id="dropzone">
+      <div class="tab-panel" id="panel-upload" role="tabpanel" aria-labelledby="tab-upload">
+        <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload an image">
           <div class="dropzone-content">
             <div class="dropzone-icon">⬆</div>
             <p class="dropzone-text">Drag &amp; drop an image here</p>
@@ -96,7 +97,7 @@
       </div>
 
       <button class="btn btn-primary" id="generate-btn">
-        <span class="btn-text">Generate &amp; Colorize</span>
+        <span class="btn-text">Run Agent Pipeline</span>
         <span class="btn-arrow">→</span>
         <span class="btn-spinner hidden">◌</span>
       </button>
