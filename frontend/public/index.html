@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ERC-8004 + x402 Demo</title>
+  <title>ERC-8004 + x402 Agent Demo</title>
+  <meta name="description" content="A production-style reference implementation of discoverable AI agents, x402 USDC payments, and ERC-8004 identity, reputation, and validation on Base Sepolia." />
+  <meta name="theme-color" content="#080b12" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ERC-8004 + x402 Agent Demo" />
+  <meta property="og:description" content="Watch one AI agent discover, pay, and verify another agent through open protocols." />
+  <meta property="og:url" content="https://erc8004-agent-demo.vercel.app/" />
+  <link rel="canonical" href="https://erc8004-agent-demo.vercel.app/" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -26,7 +33,7 @@
           </div>
         </div>
         <div class="badges">
-          <span class="badge badge-green">17 tests passing</span>
+          <span class="badge badge-green">CI verified</span>
           <span class="badge badge-blue">Base Sepolia</span>
           <span class="badge badge-orange">ERC-8004</span>
           <span class="badge badge-green">Real USDC</span>
@@ -34,7 +41,7 @@
       </div>
       <p class="header-desc">
         Agent 1 discovers Agent 2 on-chain via ERC-8004, pays $0.01 USDC via x402,
-        and receives a grayscale-converted image — fully trustless.
+        and receives a grayscale-converted image with a verifiable testnet payment and on-chain audit trail.
       </p>
     </header>
 
@@ -78,7 +85,7 @@
           </div>
           <div class="dropzone-preview hidden" id="dropzone-preview">
             <img id="preview-img" src="" alt="Preview" />
-            <button class="remove-file" id="remove-file">✕</button>
+            <button class="remove-file" id="remove-file" type="button" aria-label="Remove uploaded image">✕</button>
           </div>
         </div>
       </div>
@@ -169,7 +176,7 @@
           <h3 class="rep-title">Agent Reputation</h3>
           <p class="rep-sub">ERC-8004 ReputationRegistry · Base Sepolia</p>
         </div>
-        <button class="btn btn-outline btn-sm" id="refresh-rep">↻ Refresh</button>
+        <button class="btn btn-outline btn-sm" id="refresh-rep" type="button" aria-label="Refresh on-chain reputation">↻ Refresh</button>
       </div>
       <div class="rep-body" id="rep-body">
         <div class="rep-loading">Loading on-chain data…</div>
@@ -178,6 +185,7 @@
 
     <footer class="footer">
       <span>ERC-8004 + x402 Reference Implementation</span>
+      <a href="https://github.com/hpo1o/erc8004-agent-demo" target="_blank" rel="noopener">Source ↗</a>
       <a href="https://github.com/erc-8004/erc-8004-contracts" target="_blank" rel="noopener">ERC-8004 Contracts ↗</a>
       <a href="https://x402.org" target="_blank" rel="noopener">x402 Protocol ↗</a>
     </footer>
