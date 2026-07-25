@@ -19,6 +19,7 @@ const stepText        = document.getElementById("step-text");
 const resultsSection  = document.getElementById("results-section");
 const inputImage      = document.getElementById("input-image");
 const outputImage     = document.getElementById("output-image");
+const inputMeta       = document.getElementById("input-meta");
 const outputMeta      = document.getElementById("output-meta");
 const proofItems      = document.getElementById("proof-items");
 const agentIdentityEl = document.getElementById("agent-identity");
@@ -32,18 +33,35 @@ const previewImg      = document.getElementById("preview-img");
 const removeFileBtn   = document.getElementById("remove-file");
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(t => {
-      t.classList.remove("active");
-      t.setAttribute("aria-selected", "false");
-    });
-    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+const tabs = Array.from(document.querySelectorAll(".tab"));
 
-    tab.classList.add("active");
-    tab.setAttribute("aria-selected", "true");
-    activeTab = tab.dataset.tab;
-    document.getElementById(`panel-${activeTab}`).classList.add("active");
+function activateTab(tab) {
+  tabs.forEach(t => {
+    const selected = t === tab;
+    t.classList.toggle("active", selected);
+    t.setAttribute("aria-selected", String(selected));
+    t.tabIndex = selected ? 0 : -1;
+  });
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+
+  activeTab = tab.dataset.tab;
+  document.getElementById(`panel-${activeTab}`).classList.add("active");
+}
+
+tabs.forEach((tab, index) => {
+  tab.addEventListener("click", () => activateTab(tab));
+  tab.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+
+    let nextIndex = index;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = tabs.length - 1;
+
+    activateTab(tabs[nextIndex]);
+    tabs[nextIndex].focus();
   });
 });
 
@@ -56,9 +74,14 @@ document.querySelectorAll(".example-chip").forEach(chip => {
 });
 
 // ── File upload ───────────────────────────────────────────────────────────────
+function revokePreviewUrl() {
+  if (previewImg.src.startsWith("blob:")) URL.revokeObjectURL(previewImg.src);
+}
+
 function setUploadedFile(file) {
   if (!file || !file.type.startsWith("image/")) return;
   uploadedFile = file;
+  revokePreviewUrl();
 
   const url = URL.createObjectURL(file);
   previewImg.src = url;
@@ -68,6 +91,7 @@ function setUploadedFile(file) {
 
 function clearUploadedFile() {
   uploadedFile = null;
+  revokePreviewUrl();
   previewImg.src = "";
   dropzoneContent.classList.remove("hidden");
   dropzonePreview.classList.add("hidden");
@@ -83,8 +107,13 @@ removeFileBtn.addEventListener("click", e => {
   clearUploadedFile();
 });
 
-dropzone.addEventListener("click", e => {
-  if (!e.target.closest(".remove-file")) fileInput.click();
+dropzone.addEventListener("click", event => {
+  if (!event.target.closest("label, input, button")) fileInput.click();
+});
+dropzone.addEventListener("keydown", event => {
+  if (event.target !== dropzone || (event.key !== "Enter" && event.key !== " ")) return;
+  event.preventDefault();
+  fileInput.click();
 });
 
 dropzone.addEventListener("dragover", e => {
@@ -156,6 +185,8 @@ function buildProofPanel({ paymentTxHash, requestHash, validationTxHash,
   );
 
   // Validation request
+  addProofItem("Validation Commitment", requestHash ?? null, null);
+
   addProofItem(
     "Validation Request",
     validationTxHash ?? null,
@@ -197,7 +228,7 @@ function addProofItem(label, value, href, modifier) {
   if (modifier === "mock") {
     valueEl.innerHTML = `<span class="proof-skipped">⚠ Mock transaction</span>`;
   } else if (modifier === "skipped") {
-    valueEl.innerHTML = `<span class="proof-skipped">⚠ Skipped (demo limitation)</span>`;
+    valueEl.innerHTML = `<span class="proof-skipped">⚠ Not submitted</span>`;
   } else if (!value) {
     valueEl.innerHTML = `<span class="proof-skipped">—</span>`;
   } else if (href) {
@@ -399,8 +430,12 @@ generateBtn.addEventListener("click", async () => {
   proofItems.innerHTML = "";
   agentIdentityEl.innerHTML = "";
 
-  // Scroll to terminal
-  terminalSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  inputMeta.textContent =
+    activeTab === "upload" ? "Uploaded image · optimized PNG" : "GPT Image 2 · optimized PNG";
+
+  // Scroll to terminal while respecting reduced-motion preferences.
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  terminalSection.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
 
   // Build request
   let response;

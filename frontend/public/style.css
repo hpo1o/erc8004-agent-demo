@@ -16,7 +16,7 @@
   --red:          #ef4444;
   --text-1:       #e2e8f0;
   --text-2:       #94a3b8;
-  --text-3:       #4b5563;
+  --text-3:       #64748b;
   --mono:         'Space Mono', 'IBM Plex Mono', monospace;
   --sans:         'Inter', system-ui, sans-serif;
   --radius:       12px;
@@ -25,7 +25,7 @@
   --shadow-glow:  0 0 24px rgba(59,130,246,0.2);
 }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; color-scheme: dark; }
 
 body {
   font-family: var(--sans);
@@ -34,6 +34,7 @@ body {
   min-height: 100vh;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 /* ── Background grid ──────────────────────────────────────────────────────── */
@@ -734,6 +735,56 @@ body {
   transition: color 0.15s;
 }
 .footer a:hover { color: var(--blue); }
+
+:where(button, textarea, input, [role="button"], a):focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .page-wrap {
+    padding: 24px 14px 48px;
+    gap: 16px;
+  }
+
+  .card { padding: 20px; }
+  .header-top { gap: 12px; margin-bottom: 12px; }
+  .badges { width: 100%; gap: 6px; }
+  .badge { font-size: 10px; padding: 3px 8px; }
+  .header-desc { font-size: 14px; }
+
+  .tabs { width: 100%; }
+  .tab { flex: 1; justify-content: center; padding: 8px 10px; }
+
+  .access-row label {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .terminal-header { padding: 12px 14px; }
+  .terminal-body { padding: 16px; font-size: 12px; }
+  .result-card { padding: 16px; }
+
+  .rep-header { flex-wrap: wrap; }
+  .rep-header .btn {
+    width: 100%;
+    margin-left: 0;
+    justify-content: center;
+  }
+  .rep-stat { flex: 1; min-width: 120px; }
+  .rep-bar-label { align-items: flex-start; gap: 8px; }
+
+  .footer { gap: 10px 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* ── Utilities ────────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
