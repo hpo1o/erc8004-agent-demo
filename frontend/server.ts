@@ -787,11 +787,32 @@ const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
-const paymentRecipient = (process.env.PAYMENT_RECIPIENT_ADDRESS?.trim() || DEFAULT_AGENT_WALLET) as Address;
-if (!/^0x[0-9a-fA-F]{40}$/.test(paymentRecipient)) {
-  throw new Error("PAYMENT_RECIPIENT_ADDRESS must be a valid EVM address.");
+const configuredPaymentRecipient = process.env.PAYMENT_RECIPIENT_ADDRESS?.trim();
+const paymentRecipient = (
+  configuredPaymentRecipient && /^0x[0-9a-fA-F]{40}$/.test(configuredPaymentRecipient)
+    ? configuredPaymentRecipient
+    : DEFAULT_AGENT_WALLET
+) as Address;
+if (configuredPaymentRecipient && paymentRecipient === DEFAULT_AGENT_WALLET) {
+  console.warn("[config] invalid PAYMENT_RECIPIENT_ADDRESS; using the registered Agent 2 wallet");
 }
-const facilitatorUrl = process.env.X402_FACILITATOR_URL?.trim() || "https://x402.org/facilitator";
+
+const defaultFacilitatorUrl = "https://x402.org/facilitator";
+const configuredFacilitatorUrl = process.env.X402_FACILITATOR_URL?.trim();
+let facilitatorUrl = defaultFacilitatorUrl;
+if (configuredFacilitatorUrl) {
+  try {
+    const parsed = new URL(configuredFacilitatorUrl);
+    if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+      facilitatorUrl = parsed.toString();
+    } else {
+      console.warn("[config] X402_FACILITATOR_URL must use HTTP(S); using the default facilitator");
+    }
+  } catch {
+    console.warn("[config] invalid X402_FACILITATOR_URL; using the default facilitator");
+  }
+}
+
 const resourceServer = new x402ResourceServer(new HTTPFacilitatorClient({ url: facilitatorUrl }))
   .register(X402_NETWORK, new ExactEvmServerScheme());
 
