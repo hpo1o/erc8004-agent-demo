@@ -244,10 +244,9 @@ A production deployment could replace payer validation with zkML, a TEE oracle, 
 ## Project structure
 
     erc8004-agent-demo/
-    ├── api/                    Root-level Vercel compatibility functions
     ├── colorizer-service/      Standalone paid Agent 2
     ├── erc8004/                Registry ABIs, metadata, and on-chain scripts
-    ├── frontend/               Portfolio web application and embedded Agent 2
+    ├── frontend/               Web application, Vercel functions, and embedded Agent 2
     ├── image-generator/        Agent 1 CLI
     ├── tests/                  Unit, protocol, schema, and deployment tests
     ├── vercel.json             Root-level monorepo deployment compatibility
