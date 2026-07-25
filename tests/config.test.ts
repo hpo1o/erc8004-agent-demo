@@ -75,11 +75,17 @@ test("Vercel exposes explicit backend function entrypoints", () => {
   const config = JSON.parse(read("frontend/vercel.json")) as {
     rewrites: Array<{ source: string; destination: string }>;
   };
-  for (const path of ["process", "reputation", "health", "agent"]) {
+  for (const path of ["process", "reputation", "agent"]) {
     const source = read(`frontend/api/${path}.ts`);
     expect(source).toContain('from "../server.js"');
     expect(source).toContain("maxDuration");
   }
+
+  const health = read("frontend/api/health.ts");
+  expect(health).toContain('status: requiredReady ? "ok" : "degraded"');
+  expect(health).toContain("paymentRecipientAddress");
+  expect(health).not.toContain('from "../server.js"');
+
   expect(config.rewrites).toContainEqual({ source: "/health", destination: "/api/health" });
   expect(read("frontend/api/process.ts")).toContain("VERCEL_PROJECT_PRODUCTION_URL");
 });
@@ -121,7 +127,7 @@ test("repository-root Vercel projects deploy the frontend application", () => {
   };
 
   expect(config.installCommand).toBe("npm install --prefix frontend");
-  expect(config.builds).toContainEqual({ src: "api/*.ts", use: "@vercel/node" });
+  expect(config.builds).toContainEqual({ src: "frontend/api/*.ts", use: "@vercel/node" });
   expect(config.builds).toContainEqual({ src: "frontend/public/**", use: "@vercel/static" });
   expect(config.rewrites).toContainEqual({
     source: "/",
@@ -129,18 +135,14 @@ test("repository-root Vercel projects deploy the frontend application", () => {
   });
   expect(config.rewrites).toContainEqual({
     source: "/health",
-    destination: "/api/health.ts",
+    destination: "/frontend/api/health.ts",
   });
 
   for (const path of ["process", "reputation", "health", "agent"]) {
     expect(config.rewrites).toContainEqual({
       source: `/api/${path}`,
-      destination: `/api/${path}.ts`,
+      destination: `/frontend/api/${path}.ts`,
     });
-
-    const source = read(`api/${path}.ts`);
-    expect(source).toContain(`from "../frontend/api/${path}.js"`);
-    expect(source).toContain("maxDuration");
   }
 });
 
