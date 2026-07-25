@@ -129,10 +129,15 @@ test("repository-root Vercel projects deploy the frontend application", () => {
   });
   expect(config.rewrites).toContainEqual({
     source: "/health",
-    destination: "/api/health",
+    destination: "/api/health.ts",
   });
 
   for (const path of ["process", "reputation", "health", "agent"]) {
+    expect(config.rewrites).toContainEqual({
+      source: `/api/${path}`,
+      destination: `/api/${path}.ts`,
+    });
+
     const source = read(`api/${path}.ts`);
     expect(source).toContain(`from "../frontend/api/${path}.js"`);
     expect(source).toContain("maxDuration");

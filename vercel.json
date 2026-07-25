@@ -13,12 +13,28 @@
   ],
   "rewrites": [
     {
-      "source": "/",
-      "destination": "/frontend/public/index.html"
+      "source": "/api/process",
+      "destination": "/api/process.ts"
+    },
+    {
+      "source": "/api/reputation",
+      "destination": "/api/reputation.ts"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/health.ts"
+    },
+    {
+      "source": "/api/agent",
+      "destination": "/api/agent.ts"
     },
     {
       "source": "/health",
-      "destination": "/api/health"
+      "destination": "/api/health.ts"
+    },
+    {
+      "source": "/",
+      "destination": "/frontend/public/index.html"
     },
     {
       "source": "/app.js",
