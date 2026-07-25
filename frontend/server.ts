@@ -404,12 +404,45 @@ async function sendToColorizerWeb(
 
   emit({ type: "log", message: `→ POST ${colorizerUrl}` });
 
-  const initialRes = await fetch(colorizerUrl, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body,
-  });
+  let initialRes: Response | undefined;
+  const maxFacilitatorInitAttempts = 4;
+
+  for (let attempt = 1; attempt <= maxFacilitatorInitAttempts; attempt++) {
+    const candidate = await fetch(colorizerUrl, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body,
+    });
+
+    if (candidate.ok || candidate.status === 402) {
+      initialRes = candidate;
+      break;
+    }
+
+    const errorBody = await candidate.text();
+    const facilitatorNotReady =
+      errorBody.includes("no supported payment kinds loaded from any facilitator");
+
+    if (!facilitatorNotReady) {
+      throw new Error(`Unexpected ${candidate.status}: ${errorBody}`);
+    }
+
+    if (attempt === maxFacilitatorInitAttempts) {
+      throw new Error(
+        `x402 facilitator initialization failed after ${maxFacilitatorInitAttempts} attempts. ` +
+        "The public testnet facilitator may be temporarily unavailable."
+      );
+    }
+
+    const retryDelayMs = 1_250 * attempt;
+    emit({
+      type: "log",
+      message: `→ x402 facilitator is temporarily unavailable; retrying in ${retryDelayMs}ms...`,
+    });
+    await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+  }
+
+  if (!initialRes) throw new Error("Agent 2 did not return a response");
 
   if (initialRes.status !== 402) {
-    if (!initialRes.ok) throw new Error(`Unexpected ${initialRes.status}: ${await initialRes.text()}`);
     const data = (await initialRes.json()) as A2AResponse;
     return { grayscaleBase64: extractGrayscaleBase64(data), txHash: "no-payment-required",
              contextId: data.result?.contextId ?? "", taskId: data.result?.id ?? "" };
