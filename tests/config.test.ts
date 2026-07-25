@@ -43,6 +43,9 @@ test("Vercel runtime exports Express and exposes safe readiness checks", () => {
   expect(source).toContain("if (!process.env.VERCEL)");
   expect(source).toContain("openaiApiKey");
   expect(source).toContain("PAYER_PRIVATE_KEY is not configured");
+  expect(source).toContain("using the registered Agent 2 wallet");
+  expect(source).toContain("using the default facilitator");
+  expect(source).not.toContain('throw new Error("PAYMENT_RECIPIENT_ADDRESS must be a valid EVM address.")');
 });
 
 test("browser reports API response details instead of only an HTTP code", () => {
@@ -75,11 +78,17 @@ test("Vercel exposes explicit backend function entrypoints", () => {
   const config = JSON.parse(read("frontend/vercel.json")) as {
     rewrites: Array<{ source: string; destination: string }>;
   };
-  for (const path of ["process", "reputation", "health", "agent"]) {
+  for (const path of ["process", "reputation", "agent"]) {
     const source = read(`frontend/api/${path}.ts`);
     expect(source).toContain('from "../server.js"');
     expect(source).toContain("maxDuration");
   }
+
+  const health = read("frontend/api/health.ts");
+  expect(health).toContain('status: requiredReady ? "ok" : "degraded"');
+  expect(health).toContain("paymentRecipientAddress");
+  expect(health).not.toContain('from "../server.js"');
+
   expect(config.rewrites).toContainEqual({ source: "/health", destination: "/api/health" });
   expect(read("frontend/api/process.ts")).toContain("VERCEL_PROJECT_PRODUCTION_URL");
 });
