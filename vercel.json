@@ -3,7 +3,7 @@
   "installCommand": "npm install --prefix frontend",
   "builds": [
     {
-      "src": "frontend/api/*.ts",
+      "src": "api/*.ts",
       "use": "@vercel/node"
     },
     {
@@ -13,28 +13,12 @@
   ],
   "rewrites": [
     {
-      "source": "/api/process",
-      "destination": "/frontend/api/process.ts"
-    },
-    {
-      "source": "/api/reputation",
-      "destination": "/frontend/api/reputation.ts"
-    },
-    {
-      "source": "/api/health",
-      "destination": "/frontend/api/health.ts"
-    },
-    {
-      "source": "/api/agent",
-      "destination": "/frontend/api/agent.ts"
+      "source": "/",
+      "destination": "/frontend/public/index.html"
     },
     {
       "source": "/health",
-      "destination": "/frontend/api/health.ts"
-    },
-    {
-      "source": "/",
-      "destination": "/frontend/public/index.html"
+      "destination": "/api/health"
     },
     {
       "source": "/app.js",

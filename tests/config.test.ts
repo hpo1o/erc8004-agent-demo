@@ -130,7 +130,7 @@ test("repository-root Vercel projects deploy the frontend application", () => {
   };
 
   expect(config.installCommand).toBe("npm install --prefix frontend");
-  expect(config.builds).toContainEqual({ src: "frontend/api/*.ts", use: "@vercel/node" });
+  expect(config.builds).toContainEqual({ src: "api/*.ts", use: "@vercel/node" });
   expect(config.builds).toContainEqual({ src: "frontend/public/**", use: "@vercel/static" });
   expect(config.rewrites).toContainEqual({
     source: "/",
@@ -138,14 +138,13 @@ test("repository-root Vercel projects deploy the frontend application", () => {
   });
   expect(config.rewrites).toContainEqual({
     source: "/health",
-    destination: "/frontend/api/health.ts",
+    destination: "/api/health",
   });
 
   for (const path of ["process", "reputation", "health", "agent"]) {
-    expect(config.rewrites).toContainEqual({
-      source: `/api/${path}`,
-      destination: `/frontend/api/${path}.ts`,
-    });
+    const source = read(`api/${path}.ts`);
+    expect(source).toContain(`from "../frontend/api/${path}.js"`);
+    expect(source).toContain("maxDuration");
   }
 });
 
