@@ -531,7 +531,9 @@ async function submitValidationRequest(params: {
     account, chain: baseSepolia,
   });
 
-  const receipt = await publicClient().waitForTransactionReceipt({ hash: txHash, confirmations: 1 });
+  // Wait for an extra block so every backend behind a load-balanced public RPC
+  // can observe the request before the validator submits its response.
+  const receipt = await publicClient().waitForTransactionReceipt({ hash: txHash, confirmations: 2 });
   if (receipt.status !== "success") throw new Error(`validationRequest() reverted. Hash: ${txHash}`);
 
   return { txHash, requestHash };
@@ -563,11 +565,31 @@ async function submitValidationResponse(params: {
   const responseURI = `ipfs://${pinataCID}`;
   const responseHash = keccak256(stringToBytes(JSON.stringify(responseFile)));
 
-  const txHash = await wallet.writeContract({
-    address: VALIDATION_REGISTRY, abi: VALIDATION_ABI, functionName: "validationResponse",
-    args: [requestHash, response, responseURI, responseHash, "grayscale-conversion"],
-    account, chain: baseSepolia,
-  });
+  let txHash: Hash | undefined;
+  const maxAttempts = 4;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      txHash = await wallet.writeContract({
+        address: VALIDATION_REGISTRY, abi: VALIDATION_ABI, functionName: "validationResponse",
+        args: [requestHash, response, responseURI, responseHash, "grayscale-conversion"],
+        account, chain: baseSepolia,
+      });
+      break;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const requestNotVisible =
+        message.includes('reason: unknown') || message.includes('execution reverted: unknown');
+
+      if (!requestNotVisible || attempt === maxAttempts) throw err;
+
+      // Public Base Sepolia RPC is load-balanced. A backend can briefly lag
+      // behind the node that returned the validationRequest receipt.
+      await new Promise(resolve => setTimeout(resolve, 1_500 * attempt));
+    }
+  }
+
+  if (!txHash) throw new Error("validationResponse() was not submitted");
 
   const receipt = await publicClient().waitForTransactionReceipt({ hash: txHash, confirmations: 1 });
   if (receipt.status !== "success") throw new Error(`validationResponse() reverted. Hash: ${txHash}`);
