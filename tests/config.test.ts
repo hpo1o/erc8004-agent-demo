@@ -111,3 +111,39 @@ test("embedded Agent 2 enforces a real Base Sepolia x402 payment", () => {
   expect(source).toContain("sendToColorizerWeb(imageBase64, colorizerEndpoint, emit)");
   expect(source).toContain("responseTimeMs, endpoint: colorizerEndpoint");
 });
+
+
+test("repository-root Vercel projects deploy the frontend application", () => {
+  const config = JSON.parse(read("vercel.json")) as {
+    installCommand: string;
+    builds: Array<{ src: string; use: string }>;
+    rewrites: Array<{ source: string; destination: string }>;
+  };
+
+  expect(config.installCommand).toBe("npm install --prefix frontend");
+  expect(config.builds).toContainEqual({ src: "api/*.ts", use: "@vercel/node" });
+  expect(config.builds).toContainEqual({ src: "frontend/public/**", use: "@vercel/static" });
+  expect(config.rewrites).toContainEqual({
+    source: "/",
+    destination: "/frontend/public/index.html",
+  });
+  expect(config.rewrites).toContainEqual({
+    source: "/health",
+    destination: "/api/health",
+  });
+
+  for (const path of ["process", "reputation", "health", "agent"]) {
+    const source = read(`api/${path}.ts`);
+    expect(source).toContain(`from "../frontend/api/${path}.js"`);
+    expect(source).toContain("maxDuration");
+  }
+});
+
+test("portfolio page exposes stable project metadata", () => {
+  const source = read("frontend/public/index.html");
+  expect(source).toContain("https://erc8004-agent-demo.vercel.app/");
+  expect(source).toContain("CI verified");
+  expect(source).toContain("verifiable testnet payment and on-chain audit trail");
+  expect(source).not.toContain("17 tests passing");
+  expect(source).not.toContain("fully trustless");
+});
