@@ -43,6 +43,9 @@ test("Vercel runtime exports Express and exposes safe readiness checks", () => {
   expect(source).toContain("if (!process.env.VERCEL)");
   expect(source).toContain("openaiApiKey");
   expect(source).toContain("PAYER_PRIVATE_KEY is not configured");
+  expect(source).toContain("using the registered Agent 2 wallet");
+  expect(source).toContain("using the default facilitator");
+  expect(source).not.toContain('throw new Error("PAYMENT_RECIPIENT_ADDRESS must be a valid EVM address.")');
 });
 
 test("browser reports API response details instead of only an HTTP code", () => {
